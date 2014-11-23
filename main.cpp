@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <time.h>
 #include <chrono>
+#include <set>
+#include <sstream>
 
 using namespace std;
 
@@ -32,8 +34,8 @@ int valuesInTable[numberOfIntsBase][numberOfIntsBase];
 
 int main(int argc, char **argv)
 {
-	int countOfCalc = 1;
-
+	unsigned long long countOfCalc = 1;
+	
 	if ( argc == 1 ) {
 		std::cerr << "Usage : LS order LS count lim_seconds";
 		return 1;
@@ -48,7 +50,7 @@ int main(int argc, char **argv)
 	if (argc > 3)
 		limSecondsOneSquare = atof(argv[3]);
 
-	std::cout << "limSecondsOneSquare " << limSecondsOneSquare << std::endl;
+	//std::cout << "limSecondsOneSquare " << limSecondsOneSquare << std::endl;
 	
 	//srand((unsigned)time(0));
 
@@ -58,7 +60,15 @@ int main(int argc, char **argv)
 	std::chrono::duration<double> time_span;
 	double solving_time;
 
-	for (int i = 0; i < countOfCalc; i++) {
+	// set of unique diagonal Latin squares
+	std::set<std::string> dls_string_set;
+	std::string cur_string_set;
+	cur_string_set.resize( numberOfInts * numberOfInts );
+	unsigned k;
+	std::stringstream sstream;
+	unsigned long long genereated_count = 0;
+	
+	for (unsigned long long i = 0; i < countOfCalc; i++) {
 		//time_t before = time(NULL);
 		t1 = std::chrono::high_resolution_clock::now();
 
@@ -68,19 +78,32 @@ int main(int argc, char **argv)
 		time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 		solving_time = time_span.count();
 		
-		if ( isTimeBreak ) {
+		if ( isTimeBreak ) { // if process was interrupted, start new process
 			isTimeBreak = false;
 			continue;
 		}
+
+		// here we have diagonal Latin square, let's add it to the set
+		genereated_count++;
+		k = 0;
+		for (int j1 = 0; j1 < numberOfInts; j1++)
+			for (int j2 = 0; j2 < numberOfInts; j2++)
+				sstream << valuesInTable[j1][j2] - 1; // save values from 0 to 9
+		cur_string_set = sstream.str();
+		cout << cur_string_set << endl;
+		dls_string_set.insert( cur_string_set );
+		sstream.clear(); sstream.str("");
 		
-		Print();
+		//Print();
 		
 		min_time = min_time < solving_time ? min_time : solving_time;
 		max_time = max_time > solving_time ? max_time : solving_time;
 		sum_time += solving_time;
 
 		cout << "time in seconds : " << solving_time << endl;
-		cout << "generated " << i+1 << " from " << countOfCalc << endl;
+		cout << "processed " << i+1 << " from " << countOfCalc << endl;
+		cout << "generated " << genereated_count << endl;
+		cout << "unique DLS : " << dls_string_set.size() << endl;
 		cout << "current median time " << sum_time / double(i + 1) << endl;
 		cout << "current min_time " << min_time << endl;
 		cout << "current max_time " << max_time << endl;
@@ -179,7 +202,7 @@ void Calculate()
 		std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 		cur_solving_time_sec = time_span.count();
 		if ( cur_solving_time_sec >= limSecondsOneSquare ) {
-			std::cout << "limSecondsOneSquare " << limSecondsOneSquare << std::endl << std::endl;
+			//std::cout << "limSecondsOneSquare " << limSecondsOneSquare << std::endl << std::endl;
 			isTimeBreak = true;
 			break;
 		}
