@@ -69,7 +69,6 @@ int main(int argc, char **argv)
 	argv[2] = "100";
 	argv[3] = "10";
 #endif;
-	
 	int corecount = 0, rank = 1;
 #ifdef _MPI
 	MPI_Init( &argc, &argv );
@@ -233,7 +232,39 @@ void ComputeProcess( int rank, int corecount )
 	std::vector<odls_pair> odls_pair_vec;
 	ReadOdlsPairs( odls_pair_vec );
 	unsigned ortogonal_cells;
+
+	// at first check known DLS's from file
+	unsigned preprocess_bkv = 0;
+	std::set<dls> dls_known;
+	for ( auto &x : odls_pair_vec ) {
+		dls_known.insert( x.dls_1 );
+		dls_known.insert( x.dls_2 );
+	}
+	dls tmp_dls;
+	odls_pseudotriple psudotriple;
+	for ( auto &x : odls_pair_vec )
+		for ( auto &y : dls_known ) {
+			tmp_dls = y;
+			if ( ( tmp_dls != x.dls_1 ) && ( tmp_dls != x.dls_2 ) ) {
+				MakePseudotriple( x, tmp_dls, psudotriple );
+				if ( psudotriple.unique_orthogonal_cells.size() >= preprocess_bkv ) {
+					preprocess_bkv = psudotriple.unique_orthogonal_cells.size();
+					std::cout << "preprocess_bkv " << preprocess_bkv << std::endl;
+				}
+				// check psuedotripy by Brown (2 pairs are prthogonal)
+				if ( ( x.dls_1[0] == "0946175823" ) && 
+					 ( x.dls_2[0] == "0851734692" ) && 
+					 ( tmp_dls[0] == "0419827356" ) ) {
+					std::cout << "Brown pseudotriple BKV " << psudotriple.unique_orthogonal_cells.size() << std::endl;
+					for ( auto &x : psudotriple.unique_orthogonal_cells )
+						std::cout << x << " ";
+					std::cout << std::endl;
+				}
+			}
+		}
 	
+	std::cout << "preprocess_bkv based on knwon DLS from input file : " << preprocess_bkv << std::endl;
+
 	for (unsigned long long i = 0; i < countOfCalc; i++) {
 		t1 = std::chrono::high_resolution_clock::now();
 
@@ -489,7 +520,7 @@ void ReadOdlsPairs( std::vector<odls_pair> &odls_pair_vec )
 	// if there is no separate string at the end of file, add last pair manually
 	if ( cur_odls_pair.dls_1.size() != 0 )
 		odls_pair_vec.push_back( cur_odls_pair ); // add current odls pair
-
+	
 	/*for ( auto &x : odls_pair_vec ) {
 		for ( auto &y : x.dls_1 )
 			std::cout << y << std::endl;
