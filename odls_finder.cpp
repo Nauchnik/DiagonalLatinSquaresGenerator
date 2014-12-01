@@ -209,7 +209,7 @@ void ControlProcess( int rank, int corecount )
 void ComputeProcess( int rank, int corecount )
 {
 	double sum_time = 0.0, min_time = 604800.0, max_time = 0.0;
-	std::chrono::high_resolution_clock::time_point t1, t2, finding_new_bkv_start_time, now_time;
+	std::chrono::high_resolution_clock::time_point t1, t2, start_time, now_time;
 	std::chrono::duration<double> time_span;
 	double solving_time;
 
@@ -222,7 +222,7 @@ void ComputeProcess( int rank, int corecount )
 	unsigned best_first_pair_orthogonal_cells = 0, best_second_pair_orthogonal_cells = 0;
 	dls new_dls;
 	new_dls.resize( numberOfInts );
-	finding_new_bkv_start_time = std::chrono::high_resolution_clock::now();
+	start_time = std::chrono::high_resolution_clock::now();
 	char *psuedotriple_char_arr;
 	unsigned psuedotriple_char_arr_len = 3 *numberOfInts * numberOfInts;
 	//std::cout << "psuedotriple_char_arr_len " << psuedotriple_char_arr_len << std::endl;
@@ -316,8 +316,9 @@ void ComputeProcess( int rank, int corecount )
 			best_all_dls_psudotriple = best_one_dls_psudotriple;
 			std::cout << "best_all_dls_psudotriple_orthogonal_cells " << best_all_dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
 			now_time = chrono::high_resolution_clock::now();
-			time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - finding_new_bkv_start_time);
-			std::cout << "time for finding new BKV " << time_span.count() << std::endl;
+			time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - start_time);
+			std::cout << "time from start " << time_span.count() << std::endl;
+			std::cout << "genereated_count " << genereated_count << std::endl;
 			char_index = 0;
 			for ( auto &x : best_all_dls_psudotriple.dls_1 )
 				for ( auto &y : x )
