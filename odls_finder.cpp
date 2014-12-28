@@ -64,10 +64,11 @@ odls_pseudotriple best_one_dls_psudotriple, best_all_dls_psudotriple, dls_psudot
 int main(int argc, char **argv)
 {
 #ifdef _DEBUG
-	argc = 4;
+	argc = 5;
 	argv[1] = "10";
 	argv[2] = "100";
 	argv[3] = "10";
+	argv[4] = "pseudotriple_dls_10_template.cnf";
 #endif;
 	int corecount = 0, rank = 1;
 #ifdef _MPI
@@ -76,24 +77,46 @@ int main(int argc, char **argv)
 	MPI_Comm_rank( MPI_COMM_WORLD, &rank );
 #endif
 	
-	if ( argc == 1 ) {
-		std::cerr << "Usage : LS order LS count lim_seconds";
+	if ( argc < 4 ) {
+		std::cerr << "Usage : LS order LS count lim_seconds [pseudotriple_template_cnf_name]";
 		return 1;
 	}
 
-	if (argc > 1)
-		numberOfInts = atoi(argv[1]);
+	numberOfInts = atoi(argv[1]);
+	countOfCalc = atoi(argv[2]);
+	limSecondsOneSquare = atof(argv[3]);
 
-	if (argc > 2)
-		countOfCalc = atoi(argv[2]);
-
-	if (argc > 3)
-		limSecondsOneSquare = atof(argv[3]);
-	
 	std::cout << "numberOfInts " << numberOfInts << std::endl;
 	std::cout << "countOfCalc " << countOfCalc << std::endl;
 	std::cout << "limSecondsOneSquare " << limSecondsOneSquare << std::endl;
 	std::cout << endl;
+	
+	if ( argc == 5 ) {
+		std::string pseudotriple_template_cnf_name = argv[4];
+		std::cout << "pseudotriple_template_cnf_name " << pseudotriple_template_cnf_name << std::endl;
+		std::ifstream ifile( pseudotriple_template_cnf_name );
+		if ( !ifile.is_open() ) {
+			std::cerr << pseudotriple_template_cnf_name << " not open" << std::endl;
+			return 1;
+		}
+		ifile.close();
+		std::stringstream sstream;
+		std::vector<odls_pair> odls_pair_vec;
+		ReadOdlsPairs( odls_pair_vec );
+		unsigned dls_index = 0;
+		for ( unsigned i=0; i < odls_pair_vec[0].dls_1.size(); i++ )
+			for ( unsigned j=0; j < odls_pair_vec[0].dls_1[i].size(); j++ )
+				sstream << dls_index*1000 + 100*i + 10*j + (odls_pair_vec[0].dls_1[i][j]-48)+1 << " 0\n"; // char to int
+		dls_index = 1;
+		for ( unsigned i=0; i < odls_pair_vec[0].dls_2.size(); i++ )
+			for ( unsigned j=0; j < odls_pair_vec[0].dls_2[i].size(); j++ )
+				sstream << dls_index*1000 + 100*i + 10*j + (odls_pair_vec[0].dls_2[i][j]-48)+1 << " 0\n";
+		std::ofstream ofile("out.txt");
+		ofile << sstream.rdbuf();
+		ofile.close();
+		sstream.str(""); sstream.clear();
+		return 0;
+	}
 	
 	if ( rank == 0 )
 		ControlProcess( rank, corecount );
