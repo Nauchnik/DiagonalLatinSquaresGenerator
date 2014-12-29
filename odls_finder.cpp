@@ -36,7 +36,7 @@ struct odls_pseudotriple
 void ControlProcess( int rank, int corecount );
 void ComputeProcess( int rank, int corecount );
 void ReadOdlsPairs( std::vector<odls_pair> &odls_pair_vec );
-void MakePseudotriple( odls_pair &orthogonal_pair, dls &new_dls, odls_pseudotriple &best_total_pseudotriple );
+void MakePseudotriple( odls_pair &orthogonal_pair, dls &new_dls, odls_pseudotriple &pseudotriple );
 
 void SetDefaultValues();
 void CalculateFreeNumbers(int I, int J);
@@ -115,6 +115,38 @@ int main(int argc, char **argv)
 		ofile << sstream.rdbuf();
 		ofile.close();
 		sstream.str(""); sstream.clear();
+
+		std::ifstream solutionfile( "out_plingeling_pseudotriple_dls_10_70cells.cnf", std::ios_base::in );
+		std::string str;
+		dls new_dls;
+		std::string dls_row;
+		int val;
+		while ( std::getline( solutionfile, str ) ) {
+			if ( ( str[0] == 'v' ) && ( str[1] == ' ' ) ) {
+				sstream << str.substr(2);
+				while ( sstream >> val ) {
+					if ( ( val >= 2001 ) && ( val <= 3000 ) ) {
+						val = val % 10 ? (val % 10)-1 : 9;
+						dls_row.push_back( '0' + val );
+					}
+					if ( dls_row.size() == 10 ) {
+						new_dls.push_back( dls_row );
+						std::cout << dls_row << std::endl;
+						dls_row = "";
+					}
+				}
+				sstream.clear(); sstream.str("");
+			}
+		}
+		std::cout << std::endl;
+		
+		solutionfile.close();
+		odls_pseudotriple pseudotriple;
+		MakePseudotriple( odls_pair_vec[0], new_dls, pseudotriple );
+		std::cout << "pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
+		for ( auto &x : pseudotriple.unique_orthogonal_cells )
+			std::cout << x << " ";
+
 		return 0;
 	}
 	
