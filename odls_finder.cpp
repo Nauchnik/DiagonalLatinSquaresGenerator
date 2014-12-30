@@ -111,12 +111,26 @@ int main(int argc, char **argv)
 		for ( unsigned i=0; i < odls_pair_vec[0].dls_2.size(); i++ )
 			for ( unsigned j=0; j < odls_pair_vec[0].dls_2[i].size(); j++ )
 				sstream << dls_index*1000 + 100*i + 10*j + (odls_pair_vec[0].dls_2[i][j]-48)+1 << " 0\n";
+		// write 3rd square for testing
+		dls_index = 2;
+		for ( unsigned i=0; i < odls_pair_vec[1].dls_1.size(); i++ )
+			for ( unsigned j=0; j < odls_pair_vec[1].dls_1[i].size(); j++ )
+				sstream << dls_index*1000 + 100*i + 10*j + (odls_pair_vec[1].dls_1[i][j]-48)+1 << " 0\n";
 		std::ofstream ofile("out.txt");
 		ofile << sstream.rdbuf();
 		ofile.close();
 		sstream.str(""); sstream.clear();
 
-		std::ifstream solutionfile( "out_plingeling_pseudotriple_dls_10_70cells.cnf", std::ios_base::in );
+		odls_pseudotriple pseudotriple;
+		MakePseudotriple( odls_pair_vec[0], odls_pair_vec[1].dls_1, pseudotriple );
+		std::cout << "pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
+		std::cout << "pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
+		for ( auto &x : pseudotriple.unique_orthogonal_cells )
+			std::cout << x << " ";
+
+		std::cout << " ";
+
+		/*std::ifstream solutionfile( "out_plingeling_pseudotriple_dls_10_70cells.cnf", std::ios_base::in );
 		std::string str;
 		dls new_dls;
 		std::string dls_row;
@@ -141,11 +155,11 @@ int main(int argc, char **argv)
 		std::cout << std::endl;
 		
 		solutionfile.close();
-		odls_pseudotriple pseudotriple;
 		MakePseudotriple( odls_pair_vec[0], new_dls, pseudotriple );
 		std::cout << "pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
 		for ( auto &x : pseudotriple.unique_orthogonal_cells )
 			std::cout << x << " ";
+		*/
 
 		return 0;
 	}
