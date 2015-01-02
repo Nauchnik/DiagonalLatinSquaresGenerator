@@ -128,7 +128,7 @@ int main(int argc, char **argv)
 			std::cout << x << " ";
 		std::cout << " ";*/
 
-		std::ifstream solutionfile( "out_plingeling_pseudotriple_dls_10_pair1_62cells.cnf", std::ios_base::in );
+		std::ifstream solutionfile( "out_plingeling_pseudotriple_dls_10_pair1_68cells.cnf", std::ios_base::in );
 		std::string str;
 		dls new_dls;
 		std::string dls_row;
