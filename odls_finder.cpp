@@ -85,14 +85,15 @@ int main(int argc, char **argv)
 	numberOfInts = atoi(argv[1]);
 	countOfCalc = atoi(argv[2]);
 	limSecondsOneSquare = atof(argv[3]);
-	odls_pseudotriple pseudotriple;
 
 	std::cout << "numberOfInts " << numberOfInts << std::endl;
 	std::cout << "countOfCalc " << countOfCalc << std::endl;
 	std::cout << "limSecondsOneSquare " << limSecondsOneSquare << std::endl;
 	std::cout << endl;
+	std::string str;
 	
 	if ( argc == 5 ) {
+		std::stringstream dls_pair_clauses_sstream, template_clauses_sstream, cells_restr_clause_sstream, tmp_sstream;
 		std::string pseudotriple_template_cnf_name = argv[4];
 		std::cout << "pseudotriple_template_cnf_name " << pseudotriple_template_cnf_name << std::endl;
 		std::ifstream ifile( pseudotriple_template_cnf_name );
@@ -100,39 +101,80 @@ int main(int argc, char **argv)
 			std::cerr << pseudotriple_template_cnf_name << " not open" << std::endl;
 			return 1;
 		}
+		std::vector<unsigned> cells_restr_var_numbers;
+		unsigned uval;
+		while ( std::getline( ifile, str ) ) {
+			tmp_sstream.str(""); tmp_sstream.clear();
+			tmp_sstream << str;
+			str.erase( std::remove(str.begin(), str.end(), '\r'), str.end() );
+			template_clauses_sstream << str << std::endl;
+			if ( cells_restr_var_numbers.size() == 100 )
+				continue;
+			else
+				cells_restr_var_numbers.clear();
+			while ( tmp_sstream >> uval ) {
+				if ( uval )
+					cells_restr_var_numbers.push_back( uval );
+			}
+		}
 		ifile.close();
-		std::stringstream sstream;
+		if ( cells_restr_var_numbers.size() != 100 ) {
+			std::cerr << "cells_restr_var_numbers.size() != 100 ";
+			exit(1);
+		}
 		std::vector<odls_pair> odls_pair_vec;
 		ReadOdlsPairs( odls_pair_vec );
-		unsigned dls_index = 0;
-		for ( unsigned i=0; i < odls_pair_vec[0].dls_1.size(); i++ )
-			for ( unsigned j=0; j < odls_pair_vec[0].dls_1[i].size(); j++ )
-				sstream << dls_index*1000 + 100*i + 10*j + (odls_pair_vec[0].dls_1[i][j]-48)+1 << " 0\n"; // char to int
-		dls_index = 1;
-		for ( unsigned i=0; i < odls_pair_vec[0].dls_2.size(); i++ )
-			for ( unsigned j=0; j < odls_pair_vec[0].dls_2[i].size(); j++ )
-				sstream << dls_index*1000 + 100*i + 10*j + (odls_pair_vec[0].dls_2[i][j]-48)+1 << " 0\n";
-		// write 3rd square for testing
-		/*dls_index = 2;
-		for ( unsigned i=0; i < odls_pair_vec[1].dls_1.size(); i++ )
-			for ( unsigned j=0; j < odls_pair_vec[1].dls_1[i].size(); j++ )
-				sstream << dls_index*1000 + 100*i + 10*j + (odls_pair_vec[1].dls_1[i][j]-48)+1 << " 0\n";
-		std::ofstream ofile("out.txt");
-		ofile << sstream.rdbuf();
-		ofile.close();
-		sstream.str(""); sstream.clear();
-		MakePseudotriple( odls_pair_vec[0], odls_pair_vec[1].dls_1, pseudotriple );
-		std::cout << "pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
-		std::cout << "pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
-		for ( auto &x : pseudotriple.unique_orthogonal_cells )
-			std::cout << x << " ";
-		std::cout << " ";*/
+		std::string cur_pseudotriple_file_name; 
+		std::ofstream cur_pseudotriple_file;
+		unsigned cells_from = 62, cells_to = 71;
+		unsigned pair_index = 0;
+		for ( auto &x : odls_pair_vec ) { // for every pair of dls make cnf for searching pseudotriple
+			for ( unsigned i=0; i < x.dls_1.size(); i++ )
+				for ( unsigned j=0; j < x.dls_1[i].size(); j++ )
+					dls_pair_clauses_sstream << 100*i + 10*j + (x.dls_1[i][j]-48)+1 << " 0\n"; // char to int
+			for ( unsigned i=0; i < x.dls_2.size(); i++ )
+				for ( unsigned j=0; j < x.dls_2[i].size(); j++ ) {
+					dls_pair_clauses_sstream << 1*1000 + 100*i + 10*j + (x.dls_2[i][j]-48)+1 << " 0";
+					if ( ( i == x.dls_2.size() - 1 ) && ( j == x.dls_2[i].size() - 1 ) )
+						dls_pair_clauses_sstream << " "; // for treengling
+					else
+						dls_pair_clauses_sstream << "\n";
+				}
+			for ( unsigned i=cells_from; i <= cells_to; i++) {
+				cur_pseudotriple_file_name = "dls-pseudotriple_";
+				tmp_sstream.clear(); tmp_sstream.str("");
+				tmp_sstream << i;
+				cur_pseudotriple_file_name += tmp_sstream.str();
+				tmp_sstream.clear(); tmp_sstream.str("");
+				cur_pseudotriple_file_name += "cells_pair";
+				tmp_sstream << pair_index;
+				cur_pseudotriple_file_name += tmp_sstream.str();
+				cur_pseudotriple_file_name += ".cnf";
+				cells_restr_clause_sstream << cells_restr_var_numbers[i-1] << " 0\n";
+				cur_pseudotriple_file.open( cur_pseudotriple_file_name.c_str(), std::ios_base::out );
+				cur_pseudotriple_file << template_clauses_sstream.str();
+				cur_pseudotriple_file << cells_restr_clause_sstream.str();
+				cur_pseudotriple_file << dls_pair_clauses_sstream.str();
+				cur_pseudotriple_file.close();
+				cells_restr_clause_sstream.str(""); cells_restr_clause_sstream.clear();
+			}
+			dls_pair_clauses_sstream.str(""); dls_pair_clauses_sstream.clear();
+			pair_index++;
+		}
 
-		std::ifstream solutionfile( "out_plingeling_pseudotriple_dls_10_pair1_68cells.cnf", std::ios_base::in );
+		stringstream sstream;
+		ReadOdlsPairs( odls_pair_vec );
+		std::string solutionfile_name = "out_plingeling_dls-pseudotriple_60cells_pair0.cnf";
+		std::ifstream solutionfile( solutionfile_name.c_str(), std::ios_base::in );
 		std::string str;
 		dls new_dls;
 		std::string dls_row;
 		int val;
+		if ( !solutionfile.is_open() ) {
+			std::cerr << "solutionfile " << solutionfile_name << " not open" << std::endl;
+			return 0;
+		}
+		
 		while ( std::getline( solutionfile, str ) ) {
 			if ( ( str[0] == 'v' ) && ( str[1] == ' ' ) ) {
 				sstream << str.substr(2);
@@ -153,6 +195,7 @@ int main(int argc, char **argv)
 		std::cout << std::endl;
 		
 		solutionfile.close();
+		odls_pseudotriple pseudotriple;
 		MakePseudotriple( odls_pair_vec[0], new_dls, pseudotriple );
 		std::cout << "pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
 		for ( auto &x : pseudotriple.unique_orthogonal_cells )
