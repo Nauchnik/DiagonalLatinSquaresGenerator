@@ -81,7 +81,7 @@ int main(int argc, char **argv)
 		std::cerr << "Usage : LS order LS count lim_seconds [pseudotriple_template_cnf_name]";
 		return 1;
 	}
-
+	
 	numberOfInts = atoi(argv[1]);
 	countOfCalc = atoi(argv[2]);
 	limSecondsOneSquare = atof(argv[3]);
@@ -91,7 +91,8 @@ int main(int argc, char **argv)
 	std::cout << "limSecondsOneSquare " << limSecondsOneSquare << std::endl;
 	std::cout << endl;
 	std::string str;
-	
+	std::vector<odls_pair> odls_pair_vec;
+
 	if ( argc == 5 ) {
 		std::stringstream dls_pair_clauses_sstream, template_clauses_sstream, cells_restr_clause_sstream, tmp_sstream;
 		std::string pseudotriple_template_cnf_name = argv[4];
@@ -122,7 +123,6 @@ int main(int argc, char **argv)
 			std::cerr << "cells_restr_var_numbers.size() != 100 ";
 			exit(1);
 		}
-		std::vector<odls_pair> odls_pair_vec;
 		ReadOdlsPairs( odls_pair_vec );
 		std::string cur_pseudotriple_file_name; 
 		std::ofstream cur_pseudotriple_file;
@@ -164,7 +164,7 @@ int main(int argc, char **argv)
 
 		stringstream sstream;
 		ReadOdlsPairs( odls_pair_vec );
-		std::string solutionfile_name = "out_plingeling_dls-pseudotriple_60cells_pair0.cnf";
+		std::string solutionfile_name = "out_treengeling_dls-pseudotriple_70cells_pair18.cnf";
 		std::ifstream solutionfile( solutionfile_name.c_str(), std::ios_base::in );
 		std::string str;
 		dls new_dls;
@@ -196,7 +196,7 @@ int main(int argc, char **argv)
 		
 		solutionfile.close();
 		odls_pseudotriple pseudotriple;
-		MakePseudotriple( odls_pair_vec[0], new_dls, pseudotriple );
+		MakePseudotriple( odls_pair_vec[18], new_dls, pseudotriple );
 		std::cout << "pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
 		for ( auto &x : pseudotriple.unique_orthogonal_cells )
 			std::cout << x << " ";
