@@ -66,7 +66,7 @@ int main(int argc, char **argv)
 #ifdef _DEBUG
 	argc = 5;
 	argv[1] = "10";
-	argv[2] = "100";
+	argv[2] = "10";
 	argv[3] = "10";
 	argv[4] = "pseudotriple_dls_10_template.cnf";
 #endif;
@@ -94,6 +94,7 @@ int main(int argc, char **argv)
 	std::vector<odls_pair> odls_pair_vec;
 
 	if ( argc == 5 ) {
+#ifndef _DEBUG
 		std::stringstream dls_pair_clauses_sstream, template_clauses_sstream, cells_restr_clause_sstream, tmp_sstream;
 		std::string pseudotriple_template_cnf_name = argv[4];
 		std::cout << "pseudotriple_template_cnf_name " << pseudotriple_template_cnf_name << std::endl;
@@ -162,9 +163,11 @@ int main(int argc, char **argv)
 			pair_index++;
 		}
 
+#endif
+
 		stringstream sstream;
 		ReadOdlsPairs( odls_pair_vec );
-		std::string solutionfile_name = "out_treengeling_dls-pseudotriple_70cells_pair18.cnf";
+		std::string solutionfile_name = "out_treengeling_dls-pseudotriple_73cells_pair1.cnf";
 		std::ifstream solutionfile( solutionfile_name.c_str(), std::ios_base::in );
 		std::string str;
 		dls new_dls;
@@ -196,7 +199,7 @@ int main(int argc, char **argv)
 		
 		solutionfile.close();
 		odls_pseudotriple pseudotriple;
-		MakePseudotriple( odls_pair_vec[18], new_dls, pseudotriple );
+		MakePseudotriple( odls_pair_vec[1], new_dls, pseudotriple );
 		std::cout << "pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
 		for ( auto &x : pseudotriple.unique_orthogonal_cells )
 			std::cout << x << " ";
