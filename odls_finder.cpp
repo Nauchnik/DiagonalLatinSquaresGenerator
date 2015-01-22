@@ -204,6 +204,13 @@ int main(int argc, char **argv)
 		for ( auto &x : pseudotriple.unique_orthogonal_cells )
 			std::cout << x << " ";
 
+		// check Brown pseudotriple
+		std::cout << std::endl;
+		MakePseudotriple( odls_pair_vec[17], odls_pair_vec[18].dls_1, pseudotriple );
+		std::cout << "Brown pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
+		for ( auto &x : pseudotriple.unique_orthogonal_cells )
+			std::cout << x << " ";
+
 		return 0;
 	}
 	
@@ -478,8 +485,8 @@ void MakePseudotriple( odls_pair &orthogonal_pair, dls &new_dls, odls_pseudotrip
 	
 	for ( unsigned j1=0; j1< new_dls.size(); j1++)
 		for ( unsigned j2=0; j2 < new_dls[j1].size(); j2++) {
-			cell_plus_cell = new_dls[j1][j2]; 
-			cell_plus_cell += orthogonal_pair.dls_1[j1][j2];
+			cell_plus_cell = orthogonal_pair.dls_1[j1][j2];
+			cell_plus_cell += new_dls[j1][j2]; 
 			greece_latin_square1.insert( cell_plus_cell );
 		}
 	cur_first_pair_orthogonal_cells = greece_latin_square1.size();
@@ -489,8 +496,8 @@ void MakePseudotriple( odls_pair &orthogonal_pair, dls &new_dls, odls_pseudotrip
 	std::cout << std::endl;*/
 	for ( unsigned j1=0; j1 < new_dls.size(); j1++)
 		for ( unsigned j2=0; j2 < new_dls[j1].size(); j2++) {
-			cell_plus_cell = new_dls[j1][j2];
-			cell_plus_cell += orthogonal_pair.dls_2[j1][j2];
+			cell_plus_cell = orthogonal_pair.dls_2[j1][j2];
+			cell_plus_cell += new_dls[j1][j2];
 			greece_latin_square2.insert( cell_plus_cell );
 		}
 	cur_second_pair_orthogonal_cells = greece_latin_square2.size();
