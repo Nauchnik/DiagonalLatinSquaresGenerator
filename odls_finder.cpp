@@ -210,7 +210,7 @@ int main(int argc, char **argv)
 		std::cout << "Brown pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
 		for ( auto &x : pseudotriple.unique_orthogonal_cells )
 			std::cout << x << " ";
-
+		
 		return 0;
 	}
 	
@@ -628,7 +628,7 @@ void ReadOdlsPairs( std::vector<odls_pair> &odls_pair_vec )
 				if ( ( x != ' ' ) && ( x != '\r' ) ) 
 					nonspace_str += x;
 			if ( nonspace_str.size() != 2*numberOfInts ) {
-				std::cerr << "onspace_str.size() != 2*numberOfInts" << std::endl;
+				std::cerr << "nonspace_str.size() != 2*numberOfInts" << std::endl;
 				std::cerr << nonspace_str.size() << " != " << 2*numberOfInts << std::endl;
 				exit(1);
 			}
