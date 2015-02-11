@@ -64,11 +64,12 @@ odls_pseudotriple best_one_dls_psudotriple, best_all_dls_psudotriple, dls_psudot
 int main(int argc, char **argv)
 {
 #ifdef _DEBUG
-	argc = 5;
+	argc = 6;
 	argv[1] = "10";
 	argv[2] = "10";
 	argv[3] = "10";
 	argv[4] = "pseudotriple_dls_10_template.cnf";
+	argv[5] = "-no_pairs";
 #endif;
 	int corecount = 0, rank = 1;
 #ifdef _MPI
@@ -77,15 +78,25 @@ int main(int argc, char **argv)
 	MPI_Comm_rank( MPI_COMM_WORLD, &rank );
 #endif
 	
-	if ( argc < 4 ) {
-		std::cerr << "Usage : LS order LS count lim_seconds [pseudotriple_template_cnf_name]";
+	if ( argc < 5 ) {
+		std::cerr << "Usage : LS order LS count lim_seconds [pseudotriple_template_cnf_name] -no_pairs";
 		return 1;
 	}
 	
 	numberOfInts = atoi(argv[1]);
 	countOfCalc = atoi(argv[2]);
 	limSecondsOneSquare = atof(argv[3]);
-
+	bool isPairsUsing = true;
+	std::string nopairs_str;
+	if ( argc == 6 ) {
+		std::cout << "argv[5] " << argv[5] << std::endl;
+		nopairs_str = argv[5];
+		if ( nopairs_str == "-no_pairs" )
+			isPairsUsing = false;
+	}
+	
+	std::cout << "isPairsUsing " << isPairsUsing << std::endl;  
+	
 	std::cout << "numberOfInts " << numberOfInts << std::endl;
 	std::cout << "countOfCalc " << countOfCalc << std::endl;
 	std::cout << "limSecondsOneSquare " << limSecondsOneSquare << std::endl;
@@ -93,12 +104,11 @@ int main(int argc, char **argv)
 	std::string str;
 	std::vector<odls_pair> odls_pair_vec;
 
-	if ( argc == 5 ) {
-#ifndef _DEBUG
+	if ( argc >= 5 ) {
 		std::stringstream dls_pair_clauses_sstream, template_clauses_sstream, cells_restr_clause_sstream, tmp_sstream;
 		std::string pseudotriple_template_cnf_name = argv[4];
 		std::cout << "pseudotriple_template_cnf_name " << pseudotriple_template_cnf_name << std::endl;
-		std::ifstream ifile( pseudotriple_template_cnf_name );
+		std::ifstream ifile( pseudotriple_template_cnf_name.c_str() );
 		if ( !ifile.is_open() ) {
 			std::cerr << pseudotriple_template_cnf_name << " not open" << std::endl;
 			return 1;
@@ -127,29 +137,50 @@ int main(int argc, char **argv)
 		ReadOdlsPairs( odls_pair_vec );
 		std::string cur_pseudotriple_file_name; 
 		std::ofstream cur_pseudotriple_file;
-		unsigned cells_from = 62, cells_to = 71;
+		unsigned cells_from = 60, cells_to = 70;
 		unsigned pair_index = 0;
-		for ( auto &x : odls_pair_vec ) { // for every pair of dls make cnf for searching pseudotriple
-			for ( unsigned i=0; i < x.dls_1.size(); i++ )
-				for ( unsigned j=0; j < x.dls_1[i].size(); j++ )
-					dls_pair_clauses_sstream << 100*i + 10*j + (x.dls_1[i][j]-48)+1 << " 0\n"; // char to int
-			for ( unsigned i=0; i < x.dls_2.size(); i++ )
-				for ( unsigned j=0; j < x.dls_2[i].size(); j++ ) {
-					dls_pair_clauses_sstream << 1*1000 + 100*i + 10*j + (x.dls_2[i][j]-48)+1 << " 0";
-					if ( ( i == x.dls_2.size() - 1 ) && ( j == x.dls_2[i].size() - 1 ) )
-						dls_pair_clauses_sstream << " "; // for treengling
-					else
-						dls_pair_clauses_sstream << "\n";
+		if ( isPairsUsing ) {
+			for ( auto &x : odls_pair_vec ) { // for every pair of dls make cnf for searching pseudotriple
+				for ( unsigned i=0; i < x.dls_1.size(); i++ )
+					for ( unsigned j=0; j < x.dls_1[i].size(); j++ )
+						dls_pair_clauses_sstream << 100*i + 10*j + (x.dls_1[i][j]-48)+1 << " 0\n"; // char to int
+				for ( unsigned i=0; i < x.dls_2.size(); i++ )
+					for ( unsigned j=0; j < x.dls_2[i].size(); j++ ) {
+						dls_pair_clauses_sstream << 1*1000 + 100*i + 10*j + (x.dls_2[i][j]-48)+1 << " 0";
+						if ( ( i == x.dls_2.size() - 1 ) && ( j == x.dls_2[i].size() - 1 ) )
+							dls_pair_clauses_sstream << " "; // for treengling
+						else
+							dls_pair_clauses_sstream << "\n";
+					}
+				for ( unsigned i=cells_from; i <= cells_to; i++) {
+					cur_pseudotriple_file_name = "dls-pseudotriple_";
+					tmp_sstream.clear(); tmp_sstream.str("");
+					tmp_sstream << i;
+					cur_pseudotriple_file_name += tmp_sstream.str();
+					tmp_sstream.clear(); tmp_sstream.str("");
+					cur_pseudotriple_file_name += "cells_pair";
+					tmp_sstream << pair_index;
+					cur_pseudotriple_file_name += tmp_sstream.str();
+					cur_pseudotriple_file_name += ".cnf";
+					cells_restr_clause_sstream << cells_restr_var_numbers[i-1] << " 0\n";
+					cur_pseudotriple_file.open( cur_pseudotriple_file_name.c_str(), std::ios_base::out );
+					cur_pseudotriple_file << template_clauses_sstream.str();
+					cur_pseudotriple_file << cells_restr_clause_sstream.str();
+					cur_pseudotriple_file << dls_pair_clauses_sstream.str();
+					cur_pseudotriple_file.close();
+					cells_restr_clause_sstream.str(""); cells_restr_clause_sstream.clear();
 				}
+				dls_pair_clauses_sstream.str(""); dls_pair_clauses_sstream.clear();
+				pair_index++;
+			}
+		}
+		else {
 			for ( unsigned i=cells_from; i <= cells_to; i++) {
 				cur_pseudotriple_file_name = "dls-pseudotriple_";
 				tmp_sstream.clear(); tmp_sstream.str("");
 				tmp_sstream << i;
 				cur_pseudotriple_file_name += tmp_sstream.str();
 				tmp_sstream.clear(); tmp_sstream.str("");
-				cur_pseudotriple_file_name += "cells_pair";
-				tmp_sstream << pair_index;
-				cur_pseudotriple_file_name += tmp_sstream.str();
 				cur_pseudotriple_file_name += ".cnf";
 				cells_restr_clause_sstream << cells_restr_var_numbers[i-1] << " 0\n";
 				cur_pseudotriple_file.open( cur_pseudotriple_file_name.c_str(), std::ios_base::out );
@@ -159,11 +190,7 @@ int main(int argc, char **argv)
 				cur_pseudotriple_file.close();
 				cells_restr_clause_sstream.str(""); cells_restr_clause_sstream.clear();
 			}
-			dls_pair_clauses_sstream.str(""); dls_pair_clauses_sstream.clear();
-			pair_index++;
 		}
-
-#endif
 
 		stringstream sstream;
 		ReadOdlsPairs( odls_pair_vec );
