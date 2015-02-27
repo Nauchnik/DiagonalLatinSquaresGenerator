@@ -191,7 +191,7 @@ int main(int argc, char **argv)
 				cells_restr_clause_sstream.str(""); cells_restr_clause_sstream.clear();
 			}
 		}
-
+		
 		stringstream sstream;
 		ReadOdlsPairs( odls_pair_vec );
 		std::string solutionfile_name = "out_treengeling_dls-pseudotriple_73cells_pair1.cnf";
