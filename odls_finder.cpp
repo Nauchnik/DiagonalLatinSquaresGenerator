@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 	//argv[5] = "-no_pairs";
 #endif;
 	int corecount = 0, rank = 1;
-	isJustGeneratingDLS = true;
+	//isJustGeneratingDLS = true;
 #ifdef _MPI
 	MPI_Init( &argc, &argv );
 	MPI_Comm_size( MPI_COMM_WORLD, &corecount );
@@ -105,9 +105,9 @@ int main(int argc, char **argv)
 	std::cout << endl;
 	std::string str;
 	std::vector<odls_pair> odls_pair_vec;
-
+	
 	if ( argc >= 5 ) {
-		// checking founded SATisfying assignments mode, instead of pure DLS generating mode
+		// creating SAT encodings mode, instead of pure DLS generating mode
 		std::stringstream dls_pair_clauses_sstream, template_clauses_sstream, cells_restr_clause_sstream, tmp_sstream;
 		std::string pseudotriple_template_cnf_name = argv[4];
 		std::cout << "pseudotriple_template_cnf_name " << pseudotriple_template_cnf_name << std::endl;
@@ -420,6 +420,8 @@ void ComputeProcess( int rank, int corecount )
 	
 	std::cout << "preprocess_bkv based on knwon DLS from input file : " << preprocess_bkv << std::endl;
 
+	double dls_total_time = 0, pseudotriples_total_time = 0;
+	
 	for (unsigned long long i = 0; i < countOfCalc; i++) {
 		t1 = std::chrono::high_resolution_clock::now();
 
@@ -428,6 +430,7 @@ void ComputeProcess( int rank, int corecount )
 		t2 = std::chrono::high_resolution_clock::now();
 		time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 		solving_time = time_span.count();
+		dls_total_time += solving_time;
 		
 		if ( isTimeBreak ) { // if process was interrupted, start new process
 			isTimeBreak = false;
@@ -455,6 +458,8 @@ void ComputeProcess( int rank, int corecount )
 				std::cout << y << " ";
 			std::cout << std::endl;
 		}*/
+
+		t1 = std::chrono::high_resolution_clock::now();
 		
 		if (!isJustGeneratingDLS) {
 			// make pseudotriple for every pair and choose one with maximum of orthogonal cells
@@ -496,7 +501,11 @@ void ComputeProcess( int rank, int corecount )
 	#endif
 			}
 		}
-		
+
+		t2 = std::chrono::high_resolution_clock::now();
+		time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+		solving_time = time_span.count();
+		pseudotriples_total_time += solving_time;
 		//Print();
 		
 		min_time = min_time < solving_time ? min_time : solving_time;
@@ -513,7 +522,9 @@ void ComputeProcess( int rank, int corecount )
 		cout << endl;*/
 	}
 	std::cout << "genereated_count " << genereated_count << std::endl;
-
+	std::cout << "dls_total_time " << dls_total_time << std::endl;
+	std::cout << "pseudotriples_total_time " << pseudotriples_total_time << std::endl;
+	
 	delete[] psuedotriple_char_arr;
 }
 
@@ -563,7 +574,7 @@ void Calculate()
 	double cur_solving_time_sec;
 	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 	std::chrono::high_resolution_clock::time_point t2;
-
+	
 	CalculateFreeNumbers(0, 0);
 	int value;
 
