@@ -60,25 +60,27 @@ map<int, int>busyNumbers[numberOfIntsBase][numberOfIntsBase];
 map<int, int>diagonalBusyNumbers[numberOfIntsBase][numberOfIntsBase];
 int valuesInTable[numberOfIntsBase][numberOfIntsBase];
 odls_pseudotriple best_one_dls_psudotriple, best_all_dls_psudotriple, dls_psudotriple, best_total_pseudotriple;
+bool isJustGeneratingDLS = false;
 
 int main(int argc, char **argv)
 {
 #ifdef _DEBUG
-	argc = 6;
+	argc = 4;
 	argv[1] = "10";
 	argv[2] = "10";
 	argv[3] = "10";
-	argv[4] = "pseudotriple_dls_10_template.cnf";
-	argv[5] = "-no_pairs";
+	//argv[4] = "pseudotriple_dls_10_template.cnf";
+	//argv[5] = "-no_pairs";
 #endif;
 	int corecount = 0, rank = 1;
+	isJustGeneratingDLS = true;
 #ifdef _MPI
 	MPI_Init( &argc, &argv );
 	MPI_Comm_size( MPI_COMM_WORLD, &corecount );
 	MPI_Comm_rank( MPI_COMM_WORLD, &rank );
 #endif
 	
-	if ( argc < 5 ) {
+	if ( argc < 4 ) {
 		std::cerr << "Usage : LS order LS count lim_seconds [pseudotriple_template_cnf_name] -no_pairs";
 		return 1;
 	}
@@ -105,6 +107,7 @@ int main(int argc, char **argv)
 	std::vector<odls_pair> odls_pair_vec;
 
 	if ( argc >= 5 ) {
+		// checking founded SATisfying assignments mode, instead of pure DLS generating mode
 		std::stringstream dls_pair_clauses_sstream, template_clauses_sstream, cells_restr_clause_sstream, tmp_sstream;
 		std::string pseudotriple_template_cnf_name = argv[4];
 		std::cout << "pseudotriple_template_cnf_name " << pseudotriple_template_cnf_name << std::endl;
@@ -139,6 +142,7 @@ int main(int argc, char **argv)
 		std::ofstream cur_pseudotriple_file;
 		unsigned cells_from = 60, cells_to = 70;
 		unsigned pair_index = 0;
+
 		if ( isPairsUsing ) {
 			for ( auto &x : odls_pair_vec ) { // for every pair of dls make cnf for searching pseudotriple
 				for ( unsigned i=0; i < x.dls_1.size(); i++ )
@@ -175,6 +179,7 @@ int main(int argc, char **argv)
 			}
 		}
 		else {
+			// using no pairs
 			for ( unsigned i=cells_from; i <= cells_to; i++) {
 				cur_pseudotriple_file_name = "dls-pseudotriple_";
 				tmp_sstream.clear(); tmp_sstream.str("");
@@ -192,6 +197,8 @@ int main(int argc, char **argv)
 			}
 		}
 		
+		/*
+		// check solution
 		stringstream sstream;
 		ReadOdlsPairs( odls_pair_vec );
 		std::string solutionfile_name = "out_treengeling_dls-pseudotriple_73cells_pair1.cnf";
@@ -230,6 +237,7 @@ int main(int argc, char **argv)
 		std::cout << "pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
 		for ( auto &x : pseudotriple.unique_orthogonal_cells )
 			std::cout << x << " ";
+		 
 
 		// check Brown pseudotriple
 		std::cout << std::endl;
@@ -237,7 +245,7 @@ int main(int argc, char **argv)
 		std::cout << "Brown pseudotriple.unique_orthogonal_cells.size() " << pseudotriple.unique_orthogonal_cells.size() << std::endl;
 		for ( auto &x : pseudotriple.unique_orthogonal_cells )
 			std::cout << x << " ";
-		
+		*/
 		return 0;
 	}
 	
@@ -388,26 +396,27 @@ void ComputeProcess( int rank, int corecount )
 	}
 	dls tmp_dls;
 	odls_pseudotriple psudotriple;
-	for ( auto &x : odls_pair_vec )
-		for ( auto &y : dls_known ) {
+	for (auto &x : odls_pair_vec) {
+		for (auto &y : dls_known) {
 			tmp_dls = y;
-			if ( ( tmp_dls != x.dls_1 ) && ( tmp_dls != x.dls_2 ) ) {
-				MakePseudotriple( x, tmp_dls, psudotriple );
-				if ( psudotriple.unique_orthogonal_cells.size() >= preprocess_bkv ) {
+			if ((tmp_dls != x.dls_1) && (tmp_dls != x.dls_2)) {
+				MakePseudotriple(x, tmp_dls, psudotriple);
+				if (psudotriple.unique_orthogonal_cells.size() >= preprocess_bkv) {
 					preprocess_bkv = psudotriple.unique_orthogonal_cells.size();
 					std::cout << "preprocess_bkv " << preprocess_bkv << std::endl;
 				}
-				// check psuedotripy by Brown (2 pairs are prthogonal)
-				if ( ( x.dls_1[0] == "0946175823" ) && 
-					 ( x.dls_2[0] == "0851734692" ) && 
-					 ( tmp_dls[0] == "0419827356" ) ) {
+				// check psuedotripy by Brown (2 pairs are orthogonal)
+				if ((x.dls_1[0] == "0946175823") &&
+					(x.dls_2[0] == "0851734692") &&
+					(tmp_dls[0] == "0419827356")) {
 					std::cout << "Brown pseudotriple BKV " << psudotriple.unique_orthogonal_cells.size() << std::endl;
-					for ( auto &x : psudotriple.unique_orthogonal_cells )
+					for (auto &x : psudotriple.unique_orthogonal_cells)
 						std::cout << x << " ";
 					std::cout << std::endl;
 				}
 			}
 		}
+	}
 	
 	std::cout << "preprocess_bkv based on knwon DLS from input file : " << preprocess_bkv << std::endl;
 
@@ -447,42 +456,45 @@ void ComputeProcess( int rank, int corecount )
 			std::cout << std::endl;
 		}*/
 		
-		// make pseudotriple for every pair and choose one with maximum of orthogonal cells
-		for( auto &x : odls_pair_vec ) {
-			MakePseudotriple( x, new_dls, dls_psudotriple );
-			if ( dls_psudotriple.unique_orthogonal_cells.size() > best_one_dls_psudotriple.unique_orthogonal_cells.size() )
-				best_one_dls_psudotriple = dls_psudotriple;
-			/*std::cout << "cur_first_pair_orthogonal_cells " << cur_first_pair_orthogonal_cells << std::endl;
-			std::cout << "cur_second_pair_orthogonal_cells " << cur_second_pair_orthogonal_cells << std::endl;*/
-			//std::cout << "cur_one_dls_psudotriple_orthogonal_cells " << cur_one_dls_psudotriple_orthogonal_cells << std::endl;
-			//std::cout << "best_one_dls_psudotriple_orthogonal_cells " << best_one_dls_psudotriple_orthogonal_cells << std::endl;
-		}
+		if (!isJustGeneratingDLS) {
+			// make pseudotriple for every pair and choose one with maximum of orthogonal cells
+			for( auto &x : odls_pair_vec ) {
+				MakePseudotriple( x, new_dls, dls_psudotriple );
+				if ( dls_psudotriple.unique_orthogonal_cells.size() > best_one_dls_psudotriple.unique_orthogonal_cells.size() )
+					best_one_dls_psudotriple = dls_psudotriple;
+				//std::cout << "cur_first_pair_orthogonal_cells " << cur_first_pair_orthogonal_cells << std::endl;
+				//std::cout << "cur_second_pair_orthogonal_cells " << cur_second_pair_orthogonal_cells << std::endl;
+				//std::cout << "cur_one_dls_psudotriple_orthogonal_cells " << cur_one_dls_psudotriple_orthogonal_cells << std::endl;
+				//std::cout << "best_one_dls_psudotriple_orthogonal_cells " << best_one_dls_psudotriple_orthogonal_cells << std::endl;
+			}
 		
-		if ( best_one_dls_psudotriple.unique_orthogonal_cells.size() > best_all_dls_psudotriple.unique_orthogonal_cells.size() ) {
-			best_all_dls_psudotriple = best_one_dls_psudotriple;
-			std::cout << "best_all_dls_psudotriple_orthogonal_cells " << best_all_dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
-			now_time = chrono::high_resolution_clock::now();
-			time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - start_time);
-			std::cout << "time from start " << time_span.count() << std::endl;
-			std::cout << "genereated_count " << genereated_count << std::endl;
-			char_index = 0;
-			for ( auto &x : best_all_dls_psudotriple.dls_1 )
-				for ( auto &y : x )
-					psuedotriple_char_arr[char_index++] = y;
-			for ( auto &x : best_all_dls_psudotriple.dls_2 )
-				for ( auto &y : x )
-					psuedotriple_char_arr[char_index++] = y;
-			for ( auto &x : best_all_dls_psudotriple.dls_3 )
-				for ( auto &y : x )
-					psuedotriple_char_arr[char_index++] = y;
-			ortogonal_cells = best_all_dls_psudotriple.unique_orthogonal_cells.size();
-#ifdef _MPI
-			//std::cout << "process " << rank << " before sending" << std::endl;
-			MPI_Send( &ortogonal_cells, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD );
-			//std::cout << "process " << rank << " after sending" << std::endl;
-			MPI_Send( psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, 0, 0, MPI_COMM_WORLD );
-			//std::cout << "process " << rank << " after sending" << std::endl;
-#endif
+			if (best_one_dls_psudotriple.unique_orthogonal_cells.size() > best_all_dls_psudotriple.unique_orthogonal_cells.size()) {
+				best_all_dls_psudotriple = best_one_dls_psudotriple;
+				std::cout << "best_all_dls_psudotriple_orthogonal_cells " << best_all_dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
+				now_time = chrono::high_resolution_clock::now();
+				time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - start_time);
+				std::cout << "time from start " << time_span.count() << std::endl;
+				std::cout << "genereated_count " << genereated_count << std::endl;
+				char_index = 0;
+				for (auto &x : best_all_dls_psudotriple.dls_1)
+					for (auto &y : x)
+						psuedotriple_char_arr[char_index++] = y;
+				for (auto &x : best_all_dls_psudotriple.dls_2)
+					for (auto &y : x)
+						psuedotriple_char_arr[char_index++] = y;
+				for (auto &x : best_all_dls_psudotriple.dls_3)
+					for (auto &y : x)
+						psuedotriple_char_arr[char_index++] = y;
+				ortogonal_cells = best_all_dls_psudotriple.unique_orthogonal_cells.size();
+
+	#ifdef _MPI
+				//std::cout << "process " << rank << " before sending" << std::endl;
+				MPI_Send( &ortogonal_cells, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD );
+				//std::cout << "process " << rank << " after sending" << std::endl;
+				MPI_Send( psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, 0, 0, MPI_COMM_WORLD );
+				//std::cout << "process " << rank << " after sending" << std::endl;
+	#endif
+			}
 		}
 		
 		//Print();
@@ -500,7 +512,8 @@ void ComputeProcess( int rank, int corecount )
 		cout << "current max_time " << max_time << endl;
 		cout << endl;*/
 	}
-	
+	std::cout << "genereated_count " << genereated_count << std::endl;
+
 	delete[] psuedotriple_char_arr;
 }
 
