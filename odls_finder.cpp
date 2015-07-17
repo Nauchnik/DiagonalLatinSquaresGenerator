@@ -101,9 +101,10 @@ int main(int argc, char **argv)
 void ControlProcess( int rank, int corecount )
 {
 	std::cout << "ControlProcess()" << std::endl;
-	std::chrono::high_resolution_clock::time_point t1, t2, finding_new_bkv_start_time, now_time;
+	std::chrono::high_resolution_clock::time_point t1, t2, finding_new_bkv_start_time, now_time, total_start_time;
 	std::chrono::duration<double> time_span;
 	
+	total_start_time = std::chrono::high_resolution_clock::now();
 	char psuedotriple_char_arr[psuedotriple_char_arr_len];
 	std::ofstream ofile;
 #ifdef _MPI
@@ -165,6 +166,9 @@ void ControlProcess( int rank, int corecount )
 				time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
 				t1 = t2;
 				out_sstream << std::endl << "new total_bkv " << best_total_pseudotriple.unique_orthogonal_cells.size() << std::endl;
+				out_sstream << "time from previous BKV " << time_span.count() << std::endl;
+				time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - total_start_time);
+				out_sstream << "time from start " << time_span.count() << std::endl << std::endl; 
 				for ( auto &x : best_total_pseudotriple.dls_1 ) {
 					for ( auto &y : x )
 						out_sstream << y << " ";
@@ -187,7 +191,6 @@ void ControlProcess( int rank, int corecount )
 					out_sstream << x << " ";
 				out_sstream << std::endl;
 				
-				out_sstream << "time from previous BKV " << time_span.count() << std::endl << std::endl;
 				ofile.open( "out", std::ios_base::app );
 				ofile << out_sstream.str();
 				ofile.close();
@@ -232,7 +235,7 @@ void ComputeProcess( int rank, int corecount )
 			}
 		}
 	}
-	std::cout << "preprocess_bkv based on knwon DLS from input file : " << preprocess_bkv << std::endl;
+	std::cout << "preprocess_bkv based on known DLS from input file : " << preprocess_bkv << std::endl;
 	dls_generating_start_time = std::chrono::high_resolution_clock::now();
 
 	int parts = corecount, part = rank;
