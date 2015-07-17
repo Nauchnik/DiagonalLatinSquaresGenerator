@@ -45,6 +45,7 @@ const unsigned LS_order = 10;
 const unsigned psuedotriple_char_arr_len = 3 * LS_order * LS_order;
 odls_pseudotriple best_one_dls_psudotriple, best_all_dls_psudotriple, dls_psudotriple, best_total_pseudotriple;
 std::chrono::high_resolution_clock::time_point dls_generating_start_time;
+unsigned long long genereated_DLS_count = 0;
 
 int main(int argc, char **argv)
 {
@@ -488,7 +489,6 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 	std::string cur_string_set;
 	unsigned k;
 	std::stringstream sstream;
-	unsigned long long genereated_count = 0;
 	unsigned best_first_pair_orthogonal_cells = 0, best_second_pair_orthogonal_cells = 0;
 	dls new_dls;
 	new_dls.resize(LS_order);
@@ -505,7 +505,7 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 	dls_total_time += time_seconds;
 
 	// here we have diagonal Latin square, let's add it to the set
-	genereated_count++;
+	genereated_DLS_count++;
 	k = 0;
 	cur_string_set = "";
 
@@ -538,7 +538,7 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 		now_time = chrono::high_resolution_clock::now();
 		time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - dls_generating_start_time);
 		std::cout << "time from start " << time_span.count() << std::endl;
-		std::cout << "genereated_count " << genereated_count << std::endl;
+		std::cout << "genereated_DLS_count " << genereated_DLS_count << std::endl;
 		std::cout << "dls_total_time " << dls_total_time << std::endl;
 		std::cout << "pseudotriples_total_time " << pseudotriples_total_time << std::endl;
 		char_index = 0;
