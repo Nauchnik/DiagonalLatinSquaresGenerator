@@ -44,8 +44,9 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 const unsigned LS_order = 10;
 const unsigned psuedotriple_char_arr_len = 3 * LS_order * LS_order;
 odls_pseudotriple best_one_dls_psudotriple, best_all_dls_psudotriple, dls_psudotriple, best_total_pseudotriple;
-std::chrono::high_resolution_clock::time_point dls_generating_start_time;
+std::chrono::high_resolution_clock::time_point dls_generating_start_time, dls_generate_last_time;
 unsigned long long genereated_DLS_count = 0;
+double dls_total_time = 0, pseudotriples_total_time = 0;
 
 int main(int argc, char **argv)
 {
@@ -237,8 +238,8 @@ void ComputeProcess( int rank, int corecount )
 	}
 	std::cout << "preprocess_bkv based on known DLS from input file : " << preprocess_bkv << std::endl;
 	dls_generating_start_time = std::chrono::high_resolution_clock::now();
-
-	int parts = corecount, part = rank;
+	
+	int parts = corecount, part = rank-1;
 	deterministic_generate_dls(odls_pair_vec, rank, parts, part);
 }
 
@@ -486,9 +487,8 @@ void constructPseudotripleCNFs(std::string pseudotriple_template_cnf_name, bool 
 
 void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned short int *square)
 {
-	std::chrono::high_resolution_clock::time_point t1, t2, now_time;
+	std::chrono::high_resolution_clock::time_point now_time, prev_time;
 	std::chrono::duration<double> time_span;
-	double time_seconds;
 	std::string cur_string_set;
 	unsigned k;
 	std::stringstream sstream;
@@ -498,15 +498,12 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 	char psuedotriple_char_arr[psuedotriple_char_arr_len];
 	unsigned char_index;
 	unsigned ortogonal_cells;
-	double dls_total_time = 0, pseudotriples_total_time = 0;
 
-	t1 = std::chrono::high_resolution_clock::now();
-
-	t2 = std::chrono::high_resolution_clock::now();
-	time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-	time_seconds = time_span.count();
-	dls_total_time += time_seconds;
-
+	now_time = std::chrono::high_resolution_clock::now();
+	time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - dls_generate_last_time);
+	dls_total_time += time_span.count();
+	
+	dls_generate_last_time = now_time;
 	// here we have diagonal Latin square, let's add it to the set
 	genereated_DLS_count++;
 	k = 0;
@@ -520,7 +517,7 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 		sstream.clear(); sstream.str("");
 	}
 
-	t1 = std::chrono::high_resolution_clock::now();
+	prev_time = std::chrono::high_resolution_clock::now();
 	
 	// make pseudotriple for every pair and choose one with maximum of orthogonal cells
 	for (auto &x : odls_pair_vec) {
@@ -564,11 +561,10 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 		//std::cout << "process " << rank << " after sending" << std::endl;
 #endif
 	}
-
-	t2 = std::chrono::high_resolution_clock::now();
-	time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-	time_seconds = time_span.count();
-	pseudotriples_total_time += time_seconds;
+	
+	now_time = std::chrono::high_resolution_clock::now();
+	time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - prev_time);
+	pseudotriples_total_time += time_span.count();
 }
 
 //ДЛК находится в square[100]( а именнно square[0]-square[99]) в момент времени отмеченный коментарием на 774 строчке
@@ -591,7 +587,8 @@ int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, 
 	int number_of_comb_in_one_part = 0;
 	float fparts = parts;
 	fparts = number_of_comb / fparts;
-
+	dls_generate_last_time = std::chrono::high_resolution_clock::now();
+	
 	std::cout << "Start of generating DLS" << std::endl;
 	
 	//округление в +//
