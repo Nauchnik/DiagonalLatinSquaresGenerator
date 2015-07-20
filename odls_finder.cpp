@@ -33,20 +33,27 @@ struct odls_pseudotriple
 	std::set<std::string> unique_orthogonal_cells;
 };
 
+struct current_data_from_fragment{
+	unsigned orthogonal_value;
+	double first_dls_generate_time;
+	unsigned long long genereated_DLS_count;
+};
+
 void ControlProcess( int rank, int corecount );
 void ComputeProcess( int rank, int corecount );
 void ReadOdlsPairs( std::vector<odls_pair> &odls_pair_vec );
 void MakePseudotriple( odls_pair &orthogonal_pair, dls &new_dls, odls_pseudotriple &pseudotriple );
 void constructPseudotripleCNFs(std::string pseudotriple_template_cnf_name, bool isPairsUsing);
-int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, int parts, int part); // Alexey Zhuravlev function
-void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned short int *square);
+int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned parts, unsigned fragment_index); // Alexey Zhuravlev function
+void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned fragment_index, unsigned short int *square);
 
 const unsigned LS_order = 10;
 const unsigned psuedotriple_char_arr_len = 3 * LS_order * LS_order;
 odls_pseudotriple best_one_dls_psudotriple, best_all_dls_psudotriple, dls_psudotriple, best_total_pseudotriple;
 std::chrono::high_resolution_clock::time_point dls_generating_start_time, dls_generate_last_time;
 unsigned long long genereated_DLS_count = 0;
-double dls_total_time = 0, pseudotriples_total_time = 0;
+double dls_total_time = 0, pseudotriples_total_time = 0, first_dls_generate_time = 0;
+int number_of_comb = 15953;
 
 int main(int argc, char **argv)
 {
@@ -108,9 +115,19 @@ void ControlProcess( int rank, int corecount )
 	total_start_time = std::chrono::high_resolution_clock::now();
 	char psuedotriple_char_arr[psuedotriple_char_arr_len];
 	std::ofstream ofile;
+	std::vector<current_data_from_fragment> total_data_from_fragment;
+	total_data_from_fragment.resize(number_of_comb);
+	for (auto &x : total_data_from_fragment) {
+		x.first_dls_generate_time = 0;
+		x.genereated_DLS_count = 0;
+		x.orthogonal_value = 0;
+	}
+	
 #ifdef _MPI
 	MPI_Status status;
+	double mpi_start_time = MPI_Wtime();
 #endif
+	unsigned fragment_index;
 	dls new_dls;
 	std::stringstream out_sstream;
 	unsigned char_index;
@@ -133,6 +150,10 @@ void ControlProcess( int rank, int corecount )
 		MPI_Recv( &orthogonal_value_from_message, 1, MPI_UNSIGNED, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status );
 		//std::cout << "process " << rank << " recieved " << orthogonal_value_from_message << std::endl;
 		MPI_Recv( psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status );		
+		MPI_Recv( &fragment_index,          1, MPI_UNSIGNED, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status );
+		MPI_Recv( &first_dls_generate_time, 1, MPI_DOUBLE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status );
+		MPI_Recv( &genereated_DLS_count,    1, MPI_UNSIGNED_LONG_LONG, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status );
+		
 		//std::cout << "process " << rank << " after recieving" << std::endl;
 		/*std::cout << "psuedotriple_char_arr " << std::endl;
 		for ( unsigned i = 0; i < psuedotriple_char_arr_len; i++ )
@@ -140,7 +161,22 @@ void ControlProcess( int rank, int corecount )
 		//std::cout << std::endl;
 		out_sstream << "completed message from process " << status.MPI_SOURCE << std::endl;
 		//std::cout << out_sstream.str();
+
+		// write to file current state for every fragment
+		total_data_from_fragment[fragment_index].first_dls_generate_time = first_dls_generate_time;
+		total_data_from_fragment[fragment_index].genereated_DLS_count = genereated_DLS_count;
+		total_data_from_fragment[fragment_index].orthogonal_value = orthogonal_value_from_message;
+		std::ofstream fragment_file("fragment_file", std::ios_base::out);
+		fragment_file << "total_data_from_fragment " << MPI_Wtime() - mpi_start_time << " seconds from start " << std::endl;
+		fragment_file << "fragment_index first_dls_generate_time genereated_DLS_count orthogonal_value" << std::endl;
+		unsigned k = 0;
+		for (auto &x : total_data_from_fragment) {
+			fragment_file << k++ << " " << x.first_dls_generate_time << " " << x.genereated_DLS_count << " " << x.orthogonal_value << std::endl;
+		}
+		fragment_file.close();
+		fragment_file.clear();
 #endif
+		
 		char_index = 0;
 		for (int i = 0; i < LS_order; i++)
 			for (int j = 0; j < LS_order; j++)
@@ -239,8 +275,8 @@ void ComputeProcess( int rank, int corecount )
 	std::cout << "preprocess_bkv based on known DLS from input file : " << preprocess_bkv << std::endl;
 	dls_generating_start_time = std::chrono::high_resolution_clock::now();
 	
-	int parts = corecount, part = rank-1;
-	deterministic_generate_dls(odls_pair_vec, rank, parts, part);
+	unsigned parts = (unsigned)corecount, fragment_index = (unsigned)(rank - 1);
+	deterministic_generate_dls(odls_pair_vec, rank, parts, fragment_index);
 }
 
 void ReadOdlsPairs(std::vector<odls_pair> &odls_pair_vec)
@@ -485,7 +521,7 @@ void constructPseudotripleCNFs(std::string pseudotriple_template_cnf_name, bool 
 	*/
 }
 
-void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned short int *square)
+void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned fragment_index, unsigned short int *square)
 {
 	std::chrono::high_resolution_clock::time_point now_time, prev_time;
 	std::chrono::duration<double> time_span;
@@ -503,11 +539,17 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 	time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - dls_generate_last_time);
 	dls_total_time += time_span.count();
 	
+	// time for generating first DLS
+	if (genereated_DLS_count == 0)
+		first_dls_generate_time = time_span.count();
+	
 	dls_generate_last_time = now_time;
 	// here we have diagonal Latin square, let's add it to the set
 	genereated_DLS_count++;
 	k = 0;
 	cur_string_set = "";
+
+	prev_time = std::chrono::high_resolution_clock::now();
 
 	for (int j1 = 0; j1 < LS_order; j1++) {
 		for (int j2 = 0; j2 < LS_order; j2++) 
@@ -516,8 +558,6 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 		cur_string_set += sstream.str();
 		sstream.clear(); sstream.str("");
 	}
-
-	prev_time = std::chrono::high_resolution_clock::now();
 	
 	// make pseudotriple for every pair and choose one with maximum of orthogonal cells
 	for (auto &x : odls_pair_vec) {
@@ -559,6 +599,9 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 		//std::cout << "process " << rank << " after sending" << std::endl;
 		MPI_Send(psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
 		//std::cout << "process " << rank << " after sending" << std::endl;
+		MPI_Send(&fragment_index, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD);
+		MPI_Send(&first_dls_generate_time, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+		MPI_Send(&genereated_DLS_count, 1, MPI_UNSIGNED_LONG_LONG, 0, 0, MPI_COMM_WORLD);
 #endif
 	}
 	
@@ -568,7 +611,7 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned sho
 }
 
 //ДЛК находится в square[100]( а именнно square[0]-square[99]) в момент времени отмеченный коментарием на 774 строчке
-int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, int parts, int part)
+int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned parts, unsigned fragment_index)
 {
 	unsigned short int square[100] = { 0 };
 	unsigned short int flag[100] = { 0 };
@@ -583,7 +626,6 @@ int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, 
 	long long int count = 0;
 	int i = 0;
 	int j = 0;
-	int number_of_comb = 15953;
 	int number_of_comb_in_one_part = 0;
 	float fparts = parts;
 	fparts = number_of_comb / fparts;
@@ -681,7 +723,7 @@ int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, 
 																{
 																	flag[14] = 1;
 
-																	if (count == (number_of_comb_in_one_part*part))
+																	if (count == (number_of_comb_in_one_part*fragment_index))
 																	{
 																		for (j = 0; j<15; j++)
 																		{
@@ -689,7 +731,7 @@ int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, 
 																		}
 																	}
 
-																	if ((count >= number_of_comb_in_one_part*part) && (count <= (number_of_comb_in_one_part*(part + 1) - 1)))
+																	if ((count >= number_of_comb_in_one_part*fragment_index) && (count <= (number_of_comb_in_one_part*(fragment_index + 1) - 1)))
 																	{
 																		for (j = 0; j<15; j++)
 																		{
@@ -1336,7 +1378,7 @@ int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, 
 
 																																																																																																						/*Вывод ДЛК завершен*/
 
-																																																																																																						processNewDLS(odls_pair_vec, rank, square);
+																																																																																																						processNewDLS(odls_pair_vec, rank, fragment_index, square);
 																																																																																																					}
 																																																																																																				}
 																																																																																																				flag[98] = 0;
