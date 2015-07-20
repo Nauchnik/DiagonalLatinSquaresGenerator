@@ -275,6 +275,7 @@ void ComputeProcess( int rank, int corecount )
 	std::cout << "preprocess_bkv based on known DLS from input file : " << preprocess_bkv << std::endl;
 	dls_generating_start_time = std::chrono::high_resolution_clock::now();
 	
+	// parts -> 72356
 	unsigned parts = (unsigned)corecount, fragment_index = (unsigned)(rank - 1);
 	deterministic_generate_dls(odls_pair_vec, rank, parts, fragment_index);
 }
