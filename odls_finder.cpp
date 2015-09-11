@@ -33,10 +33,13 @@ struct odls_pseudotriple
 	std::set<std::string> unique_orthogonal_cells;
 };
 
-struct current_data_from_fragment{
+struct fragment_data{
 	unsigned orthogonal_value;
 	double first_dls_generate_time;
 	unsigned long long genereated_DLS_count;
+	double start_processing_time;
+	double end_processing_time;
+	short int result;
 };
 
 void ControlProcess( int rank, int corecount );
@@ -44,16 +47,22 @@ void ComputeProcess( int rank, int corecount );
 void ReadOdlsPairs( std::vector<odls_pair> &odls_pair_vec );
 void MakePseudotriple( odls_pair &orthogonal_pair, dls &new_dls, odls_pseudotriple &pseudotriple );
 void constructPseudotripleCNFs(std::string pseudotriple_template_cnf_name, bool isPairsUsing);
-int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned parts, unsigned fragment_index); // Alexey Zhuravlev function
-void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned fragment_index, unsigned short int *square);
+int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, unsigned fragment_index); // Alexey Zhuravlev function
+void processNewDLS(std::vector<odls_pair> &odls_pair_vec, unsigned fragment_index, unsigned short int *square);
 
 const unsigned LS_order = 10;
 const unsigned psuedotriple_char_arr_len = 3 * LS_order * LS_order;
+const unsigned number_of_comb = 15953; // 72356
+const short int STOP_DUE_NO_DLS = 1;
+const short int STOP_DUE_LOW_LOCAL_BKV = 2;
+const double WAIT_FIRST_DLS_SECONDS = 3600;
+const double WAIT_FINAL_PROCESS_SECONDS = 36000;
+const unsigned MAX_DIFF_VALUE_FROM_BKV = 5;
+
 odls_pseudotriple best_one_dls_psudotriple, best_all_dls_psudotriple, dls_psudotriple, best_total_pseudotriple;
-std::chrono::high_resolution_clock::time_point dls_generating_start_time, dls_generate_last_time;
+std::chrono::high_resolution_clock::time_point dls_generate_start_time, dls_generate_last_time;
 unsigned long long genereated_DLS_count = 0;
 double dls_total_time = 0, pseudotriples_total_time = 0, first_dls_generate_time = 0;
-int number_of_comb = 15953;
 
 int main(int argc, char **argv)
 {
@@ -64,13 +73,11 @@ int main(int argc, char **argv)
 #endif;
 	int corecount = 0, rank = 1;
 	//isJustGeneratingDLS = true;
-#ifdef _MPI
+	
 	MPI_Init( &argc, &argv );
 	MPI_Comm_size( MPI_COMM_WORLD, &corecount );
 	MPI_Comm_rank( MPI_COMM_WORLD, &rank );
-#else
-	corecount = 480;
-#endif
+
 	std::cout << "corecount " << corecount << std::endl;
 
 	if ( argc > 3 ) {
@@ -111,22 +118,43 @@ void ControlProcess( int rank, int corecount )
 	std::cout << "ControlProcess()" << std::endl;
 	std::chrono::high_resolution_clock::time_point t1, t2, finding_new_bkv_start_time, now_time, total_start_time;
 	std::chrono::duration<double> time_span;
-	
 	total_start_time = std::chrono::high_resolution_clock::now();
+	
+	// TODO
+	// fix start time of solving for every task
+	// stop program when there are no free tasks and every task is being processed at least some TIME LIMIT
+	// one needs such stop criteria because some tasks can works very long time
+	
+	if (number_of_comb < corecount - 1) {
+		std::cerr << "number_of_comb < corecount - 1" << std::endl;
+		std::cerr << number_of_comb << " < " << corecount - 1 << std::endl;
+		exit(1);
+	}
+	
+	MPI_Status status;
+	MPI_Request request;
+	double mpi_start_time = MPI_Wtime();
+	unsigned fragment_index_to_send = corecount - 1;
+
 	char psuedotriple_char_arr[psuedotriple_char_arr_len];
 	std::ofstream ofile;
-	std::vector<current_data_from_fragment> total_data_from_fragment;
-	total_data_from_fragment.resize(number_of_comb);
-	for (auto &x : total_data_from_fragment) {
+	std::vector<fragment_data> total_fragment_data;
+	total_fragment_data.resize(number_of_comb);
+	for (auto &x : total_fragment_data) {
 		x.first_dls_generate_time = 0;
 		x.genereated_DLS_count = 0;
 		x.orthogonal_value = 0;
+		x.start_processing_time = 0.0;
+		x.end_processing_time = 0.0;
+		x.result = 0;
 	}
 	
-#ifdef _MPI
-	MPI_Status status;
-	double mpi_start_time = MPI_Wtime();
-#endif
+	// send first tasks to all compute processes
+	for (unsigned i = 0; i < (unsigned)(corecount - 1); i++) {
+		MPI_Send(&i, 1, MPI_UNSIGNED, i + 1, 0, MPI_COMM_WORLD);
+		total_fragment_data[i].start_processing_time = MPI_Wtime();
+	}
+	
 	unsigned fragment_index;
 	dls new_dls;
 	std::stringstream out_sstream;
@@ -143,39 +171,80 @@ void ControlProcess( int rank, int corecount )
 		x.resize(LS_order);
 	
 	unsigned orthogonal_value_from_message = 0;
+	unsigned solved_tasks_count = 0;
+	unsigned current_bkv;
+	unsigned fragment_index_from_process;
+	unsigned no_dls_stopped_count = 0, low_local_bkv_stopped_count = 0;
 	t1 = std::chrono::high_resolution_clock::now();
-	for ( ;; ) {
-#ifdef _MPI
-		//std::cout << "process " << rank << " before recieving" << std::endl;
-		MPI_Recv( &orthogonal_value_from_message, 1, MPI_UNSIGNED, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status );
-		//std::cout << "process " << rank << " recieved " << orthogonal_value_from_message << std::endl;
-		MPI_Recv( psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status );		
-		MPI_Recv( &fragment_index,          1, MPI_UNSIGNED, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status );
-		MPI_Recv( &first_dls_generate_time, 1, MPI_DOUBLE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status );
-		MPI_Recv( &genereated_DLS_count,    1, MPI_UNSIGNED_LONG_LONG, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status );
-		
-		//std::cout << "process " << rank << " after recieving" << std::endl;
-		/*std::cout << "psuedotriple_char_arr " << std::endl;
-		for ( unsigned i = 0; i < psuedotriple_char_arr_len; i++ )
-			std::cout << psuedotriple_char_arr[i];*/
-		//std::cout << std::endl;
-		out_sstream << "completed message from process " << status.MPI_SOURCE << std::endl;
-		//std::cout << out_sstream.str();
 
+	// start of receiving results and sending new tasks instead
+	while (solved_tasks_count < number_of_comb) {
+		//std::cout << "process " << rank << " before recieving" << std::endl;
+		MPI_Recv( &fragment_index_from_process, 1, MPI_UNSIGNED, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status );
+		MPI_Recv( &orthogonal_value_from_message, 1, MPI_UNSIGNED, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status );
+		
+		// if processing of a task was interrupted, then send new task on a freed process
+		if ( ( orthogonal_value_from_message == STOP_DUE_NO_DLS ) ||
+			 ( orthogonal_value_from_message == STOP_DUE_LOW_LOCAL_BKV ) )
+		{
+			solved_tasks_count++;
+			out_sstream << "solved_tasks_count " << solved_tasks_count << std::endl;
+			
+			total_fragment_data[fragment_index_from_process].end_processing_time = MPI_Wtime();
+			if (orthogonal_value_from_message == STOP_DUE_NO_DLS)
+				total_fragment_data[fragment_index_from_process].result = STOP_DUE_NO_DLS;
+			else if ( orthogonal_value_from_message == STOP_DUE_LOW_LOCAL_BKV )
+				total_fragment_data[fragment_index_from_process].result = STOP_DUE_LOW_LOCAL_BKV;
+			
+			no_dls_stopped_count = low_local_bkv_stopped_count = 0;
+			for (auto &x : total_fragment_data) {
+				if (x.result == STOP_DUE_NO_DLS)
+					no_dls_stopped_count++;
+				else if (x.result == STOP_DUE_LOW_LOCAL_BKV)
+					low_local_bkv_stopped_count++;
+			}
+			out_sstream << "no_dls_stopped_count " << no_dls_stopped_count << std::endl;
+			out_sstream << "low_local_bkv_stopped_count " << low_local_bkv_stopped_count << std::endl;
+			
+			// send new task if there are free ones
+			if ( fragment_index_to_send < number_of_comb ) {
+				MPI_Send(&fragment_index_to_send, 1, MPI_UNSIGNED, status.MPI_SOURCE, 0, MPI_COMM_WORLD);
+				total_fragment_data[fragment_index_to_send].start_processing_time = MPI_Wtime();
+				fragment_index_to_send++;
+			}
+			out_sstream << "fragment_index_to_send " << fragment_index_to_send << " was sent" << std::endl;
+			out_sstream << std::endl;
+			ofile.open("out", std::ios_base::app);
+			ofile << out_sstream.str();
+			ofile.close();
+			out_sstream.clear(); out_sstream.str("");
+			continue;
+		}
+		else if ((orthogonal_value_from_message > 0) && (orthogonal_value_from_message <= LS_order*LS_order)) { // if new local BKV was received
+			//std::cout << "process " << rank << " recieved " << orthogonal_value_from_message << std::endl;
+			MPI_Recv(psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
+			MPI_Recv(&fragment_index, 1, MPI_UNSIGNED, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
+			MPI_Recv(&first_dls_generate_time, 1, MPI_DOUBLE, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
+			MPI_Recv(&genereated_DLS_count, 1, MPI_UNSIGNED_LONG_LONG, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
+		}
+		else {
+			std::cerr << " incorrect orthogonal_value_from_message value " << orthogonal_value_from_message << std::endl;
+			MPI_Abort(MPI_COMM_WORLD, 0);
+		}
+		
 		// write to file current state for every fragment
-		total_data_from_fragment[fragment_index].first_dls_generate_time = first_dls_generate_time;
-		total_data_from_fragment[fragment_index].genereated_DLS_count = genereated_DLS_count;
-		total_data_from_fragment[fragment_index].orthogonal_value = orthogonal_value_from_message;
+		total_fragment_data[fragment_index].first_dls_generate_time = first_dls_generate_time;
+		total_fragment_data[fragment_index].genereated_DLS_count = genereated_DLS_count;
+		total_fragment_data[fragment_index].orthogonal_value = orthogonal_value_from_message;
 		std::ofstream fragment_file("fragment_file", std::ios_base::out);
 		fragment_file << "total_data_from_fragment " << MPI_Wtime() - mpi_start_time << " seconds from start " << std::endl;
 		fragment_file << "fragment_index first_dls_generate_time genereated_DLS_count orthogonal_value" << std::endl;
 		unsigned k = 0;
-		for (auto &x : total_data_from_fragment) {
+		for (auto &x : total_fragment_data) {
 			fragment_file << k++ << " " << x.first_dls_generate_time << " " << x.genereated_DLS_count << " " << x.orthogonal_value << std::endl;
 		}
 		fragment_file.close();
 		fragment_file.clear();
-#endif
 		
 		char_index = 0;
 		for (int i = 0; i < LS_order; i++)
@@ -189,46 +258,77 @@ void ControlProcess( int rank, int corecount )
 				new_dls[i][j] = psuedotriple_char_arr[char_index++];
 		MakePseudotriple( cur_pair, new_dls, dls_psudotriple );
 		out_sstream << "dls_psudotriple.unique_orthogonal_cells.size() " << dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
+		
 		if ( orthogonal_value_from_message != dls_psudotriple.unique_orthogonal_cells.size() ) {
 			std::cerr << "error. orthogonal_value_from_message != dls_psudotriple.unique_orthogonal_cells.size()" << std::endl;
 			std::cerr << orthogonal_value_from_message << " != " << dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
-#ifdef _MPI
+
 			MPI_Abort( MPI_COMM_WORLD, 0 );
-#endif
 		}
-		else {
-			if ( dls_psudotriple.unique_orthogonal_cells.size() > best_total_pseudotriple.unique_orthogonal_cells.size() ) {
-				best_total_pseudotriple = dls_psudotriple;
-				t2 = std::chrono::high_resolution_clock::now();
-				time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-				t1 = t2;
-				out_sstream << std::endl << "new total_bkv " << best_total_pseudotriple.unique_orthogonal_cells.size() << std::endl;
-				out_sstream << "time from previous BKV " << time_span.count() << std::endl;
-				time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - total_start_time);
-				out_sstream << "time from start " << time_span.count() << std::endl << std::endl; 
-				for ( auto &x : best_total_pseudotriple.dls_1 ) {
-					for ( auto &y : x )
-						out_sstream << y << " ";
-					out_sstream << std::endl;
+		
+		if ( dls_psudotriple.unique_orthogonal_cells.size() > best_total_pseudotriple.unique_orthogonal_cells.size() ) {
+			// new BKV found
+			best_total_pseudotriple = dls_psudotriple;
+
+			// send new BKV to all computing processes
+			current_bkv = best_total_pseudotriple.unique_orthogonal_cells.size();
+			for (unsigned i = 0; i < (unsigned)(corecount - 1); i++)
+				MPI_Isend(&current_bkv, 1, MPI_UNSIGNED, i + 1, 0, MPI_COMM_WORLD, &request);
+			
+			t2 = std::chrono::high_resolution_clock::now();
+			time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+			t1 = t2;
+			out_sstream << std::endl << "new total_bkv " << best_total_pseudotriple.unique_orthogonal_cells.size() << std::endl;
+			out_sstream << "time from previous BKV " << time_span.count() << std::endl;
+			time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - total_start_time);
+			out_sstream << "time from start " << time_span.count() << std::endl << std::endl; 
+			for ( auto &x : best_total_pseudotriple.dls_1 ) {
+				for ( auto &y : x )
+					out_sstream << y << " ";
+				out_sstream << std::endl;
+			}
+			out_sstream << std::endl;
+			for ( auto &x : best_total_pseudotriple.dls_2 ) {
+				for ( auto &y : x )
+					out_sstream << y << " ";
+				out_sstream << std::endl;
+			}
+			out_sstream << std::endl;
+			for ( auto &x : best_total_pseudotriple.dls_3 ) {
+				for ( auto &y : x )
+					out_sstream << y << " ";
+				out_sstream << std::endl;
+			}
+			out_sstream << std::endl;
+			for ( auto &x : best_total_pseudotriple.unique_orthogonal_cells )
+				out_sstream << x << " ";
+			out_sstream << std::endl;
+			
+			ofile.open( "out", std::ios_base::app );
+			ofile << out_sstream.str();
+			ofile.close();
+			out_sstream.clear(); out_sstream.str("");
+		}
+		// check if it's time to stop program
+		if (number_of_comb - solved_tasks_count < (unsigned)(corecount - 1)) {
+			// there are some idle processes right now
+			// check of every task was processed with enough time
+			double current_time = MPI_Wtime();
+			bool isTimeToInturrupt = true;
+			unsigned final_tasks_count = 0;
+			for (auto &x : total_fragment_data) {
+				if (x.end_processing_time == 0.0) {
+					final_tasks_count++;
+					if (current_time - x.start_processing_time < WAIT_FINAL_PROCESS_SECONDS)
+						isTimeToInturrupt = false;
 				}
-				out_sstream << std::endl;
-				for ( auto &x : best_total_pseudotriple.dls_2 ) {
-					for ( auto &y : x )
-						out_sstream << y << " ";
-					out_sstream << std::endl;
-				}
-				out_sstream << std::endl;
-				for ( auto &x : best_total_pseudotriple.dls_3 ) {
-					for ( auto &y : x )
-						out_sstream << y << " ";
-					out_sstream << std::endl;
-				}
-				out_sstream << std::endl;
-				for ( auto &x : best_total_pseudotriple.unique_orthogonal_cells )
-					out_sstream << x << " ";
-				out_sstream << std::endl;
+			}
+			// if at least 1 process works less than limit then don't interrupt
+			if (isTimeToInturrupt) {
+				out_sstream << "*** stop criteria ***" << std::endl;
+				out_sstream << "final_tasks_count " << final_tasks_count << std::endl;
 				
-				ofile.open( "out", std::ios_base::app );
+				ofile.open("out", std::ios_base::app);
 				ofile << out_sstream.str();
 				ofile.close();
 				out_sstream.clear(); out_sstream.str("");
@@ -241,6 +341,7 @@ void ComputeProcess( int rank, int corecount )
 {
 	std::vector<odls_pair> odls_pair_vec;
 	ReadOdlsPairs( odls_pair_vec );
+	unsigned fragment_index = 0;
 	
 	// check pseudotriples based on known DLS from pairs
 	unsigned preprocess_bkv = 0;
@@ -249,6 +350,8 @@ void ComputeProcess( int rank, int corecount )
 		dls_known.insert( x.dls_1 );
 		dls_known.insert( x.dls_2 );
 	}
+	
+	// on prerpocess make pseudotriples based on DLS from pairs 
 	dls tmp_dls;
 	odls_pseudotriple psudotriple;
 	for (auto &x : odls_pair_vec) {
@@ -273,11 +376,44 @@ void ComputeProcess( int rank, int corecount )
 		}
 	}
 	std::cout << "preprocess_bkv based on known DLS from input file : " << preprocess_bkv << std::endl;
-	dls_generating_start_time = std::chrono::high_resolution_clock::now();
 	
-	// parts -> 72356
-	unsigned parts = (unsigned)corecount, fragment_index = (unsigned)(rank - 1);
-	deterministic_generate_dls(odls_pair_vec, rank, parts, fragment_index);
+	MPI_Status status;
+	unsigned old_fragment_index;
+	short int result;
+	
+	// repeat solving tasks from control process
+	for (;;) {
+		old_fragment_index = fragment_index;
+		MPI_Recv(&fragment_index, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD, &status);
+		if (fragment_index < old_fragment_index) {
+			std::cerr << "fragment_index < old_fragment_index" << std::endl;
+			std::cerr << fragment_index << " < " << old_fragment_index << std::endl;
+			std::cerr << "may be insead of index we got new bkv" << std::endl;
+			exit(1);
+		}
+		// TODO for Alexey: launch deterministic_generate_dls for short time - for checking conditions
+		result = deterministic_generate_dls(odls_pair_vec, fragment_index);
+		
+		if (result == 0) { // whole subspace of the search space was processed
+			std::cout << "fragment_index " << fragment_index << " processed all subspace" << std::endl;
+			break;
+		}
+		
+		std::cout << "deterministic_generate_dls() interrupted on rank " << rank << std::endl;
+		
+		if (result == STOP_DUE_NO_DLS)
+			std::cout << "STOP_DUE_NO_DLS" << std::endl;
+		else if (result == STOP_DUE_LOW_LOCAL_BKV)
+			std::cout << "STOP_DUE_LOW_LOCAL_BKV" << rank << std::endl;
+		else {
+			std::cerr << "incorrect result value " << result << std::endl;
+			exit(1);
+		}
+		
+		// result > 0, i.e. task solving was interrupted, ask for new task
+		MPI_Send(&fragment_index, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD);
+		MPI_Send(&result, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD);
+	}
 }
 
 void ReadOdlsPairs(std::vector<odls_pair> &odls_pair_vec)
@@ -522,7 +658,7 @@ void constructPseudotripleCNFs(std::string pseudotriple_template_cnf_name, bool 
 	*/
 }
 
-void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned fragment_index, unsigned short int *square)
+void processNewDLS(std::vector<odls_pair> &odls_pair_vec, unsigned fragment_index, unsigned short int *square)
 {
 	std::chrono::high_resolution_clock::time_point now_time, prev_time;
 	std::chrono::duration<double> time_span;
@@ -574,10 +710,9 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned fra
 	if (best_one_dls_psudotriple.unique_orthogonal_cells.size() > best_all_dls_psudotriple.unique_orthogonal_cells.size()) {
 		best_all_dls_psudotriple = best_one_dls_psudotriple;
 		std::cout << "***" << std::endl;
-		std::cout << "New local record on rank " << rank << std::endl;
 		std::cout << "best_all_dls_psudotriple_orthogonal_cells " << best_all_dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
 		now_time = chrono::high_resolution_clock::now();
-		time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - dls_generating_start_time);
+		time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - dls_generate_start_time);
 		std::cout << "time from start " << time_span.count() << std::endl;
 		std::cout << "genereated_DLS_count " << genereated_DLS_count << std::endl;
 		std::cout << "dls_total_time " << dls_total_time << std::endl;
@@ -593,8 +728,8 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned fra
 			for (auto &y : x)
 				psuedotriple_char_arr[char_index++] = y;
 		ortogonal_cells = best_all_dls_psudotriple.unique_orthogonal_cells.size();
-
-#ifdef _MPI
+		
+		MPI_Send(&fragment_index, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD);
 		//std::cout << "process " << rank << " before sending" << std::endl;
 		MPI_Send(&ortogonal_cells, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD);
 		//std::cout << "process " << rank << " after sending" << std::endl;
@@ -603,7 +738,6 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned fra
 		MPI_Send(&fragment_index, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&first_dls_generate_time, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&genereated_DLS_count, 1, MPI_UNSIGNED_LONG_LONG, 0, 0, MPI_COMM_WORLD);
-#endif
 	}
 	
 	now_time = std::chrono::high_resolution_clock::now();
@@ -612,7 +746,7 @@ void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned fra
 }
 
 //ДЛК находится в square[100]( а именнно square[0]-square[99]) в момент времени отмеченный коментарием на 774 строчке
-int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, unsigned parts, unsigned fragment_index)
+int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, unsigned fragment_index)
 {
 	unsigned short int square[100] = { 0 };
 	unsigned short int flag[100] = { 0 };
@@ -627,23 +761,35 @@ int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, 
 	long long int count = 0;
 	int i = 0;
 	int j = 0;
-	int number_of_comb_in_one_part = 0;
-	float fparts = parts;
-	fparts = number_of_comb / fparts;
-	dls_generate_last_time = std::chrono::high_resolution_clock::now();
+	int number_of_comb_in_one_part = 1;
+	MPI_Status mpi_status;
+	MPI_Request mpi_request;
 	
+	std::chrono::duration<double> time_span;
+	std::chrono::high_resolution_clock::time_point current_time;
+	int iprobe_message = 0, message_size = 0;
+	unsigned bkv_from_control_process = 0;
+	
+	dls_generate_start_time = std::chrono::high_resolution_clock::now();
+	dls_generate_last_time = std::chrono::high_resolution_clock::now();
 	std::cout << "Start of generating DLS" << std::endl;
 	
+	genereated_DLS_count = 0;
+	dls_total_time = 0, pseudotriples_total_time = 0, first_dls_generate_time = 0;
+
+	/*float fparts = parts;
+	fparts = number_of_comb / fparts;
+	double fparts = parts;*/
+	
 	//округление в +//
-	int inter;
+	/*int inter;
 	float finter;
 	inter = fparts;
 	finter = inter;
 	if (fparts != finter)
 		fparts = finter + 1;
 	else
-		fparts = finter;
-	number_of_comb_in_one_part = fparts;
+		fparts = finter;*/
 
 	// генерация диапазона поиска
 	for (square[0] = 0; square[0] <= 0; square[0]++) /*инициализцая 0 элемента*/
@@ -770,8 +916,8 @@ int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, 
 			}
 		}
 	}
-
-	// Подсчет пороговых значний порогов
+	
+	// Подсчет пороговых значений порогов
 	number_min = (start[10] * 10000) + (start[11] * 1000) + (start[12] * 100) + (start[13] * 10) + start[14];
 	number_max = (end[10] * 10000) + (end[11] * 1000) + (end[12] * 100) + (end[13] * 10) + end[14];
 
@@ -1257,6 +1403,24 @@ int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, 
 																																																																																	}
 																																																																																	for (square[80] = 0; ((square[80] < 10) && (flag[79] == 1)); square[80]++) /*инициализцая 80 элемента*/
 																																																																																	{
+																																																																																		// if still no DLS then check if time is over
+																																																																																		if (!genereated_DLS_count) {
+																																																																																			current_time = std::chrono::high_resolution_clock::now();
+																																																																																			time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_time - dls_generate_start_time);
+																																																																																			if (time_span.count() >= WAIT_FIRST_DLS_SECONDS)
+																																																																																				return STOP_DUE_NO_DLS;
+																																																																																		}
+																																																																																		else {
+																																																																																			iprobe_message = 0;
+																																																																																			MPI_Iprobe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &iprobe_message, &mpi_status);
+																																																																																			//if ( pdsat_verbosity > 0 )
+																																																																																			//	std::cout << "iprobe_message " << iprobe_message << std::endl;
+																																																																																			if (iprobe_message) {
+																																																																																				MPI_Irecv(&bkv_from_control_process, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD, &mpi_request);
+																																																																																				if (bkv_from_control_process > best_all_dls_psudotriple.unique_orthogonal_cells.size() + MAX_DIFF_VALUE_FROM_BKV)
+																																																																																					return STOP_DUE_LOW_LOCAL_BKV;
+																																																																																			}
+																																																																																		}
 																																																																																		if ((square[80] != square[70]) && (square[80] != square[60]) && (square[80] != square[50]) && (square[80] != square[40]) && (square[80] != square[30]) && (square[80] != square[20]) && (square[80] != square[10]) && (square[80] != square[0]))
 																																																																																		{
 																																																																																			flag[80] = 1;
@@ -1376,10 +1540,8 @@ int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, 
 																																																																																																						/* ДЛК сгенерирован*/
 																																																																																																						count++;
 																																																																																																						/* В данный момент времени в square[0]-square[99] находится ДЛК */
-
-																																																																																																						/*Вывод ДЛК завершен*/
-
-																																																																																																						processNewDLS(odls_pair_vec, rank, fragment_index, square);
+																																																																																																						
+																																																																																																						processNewDLS(odls_pair_vec, fragment_index, square);
 																																																																																																					}
 																																																																																																				}
 																																																																																																				flag[98] = 0;
@@ -1579,5 +1741,5 @@ int deterministic_generate_dls(std::vector<odls_pair> &odls_pair_vec, int rank, 
 		}
 	}
 
-	return (0);
+	return 0;
 }
