@@ -165,10 +165,10 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			if ( fragment_index_to_send < number_of_comb ) {
 				MPI_Send(&fragment_index_to_send, 1, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD);
 				total_fragment_data[fragment_index_to_send].start_processing_time = MPI_Wtime();
+				out_sstream << "fragment_index_to_send " << fragment_index_to_send << " was sent" << std::endl;
+				out_sstream << std::endl;
 				fragment_index_to_send++;
 			}
-			out_sstream << "fragment_index_to_send " << fragment_index_to_send << " was sent" << std::endl;
-			out_sstream << std::endl;
 			ofile.open("out", std::ios_base::app);
 			ofile << out_sstream.str();
 			ofile.close();
