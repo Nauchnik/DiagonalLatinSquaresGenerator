@@ -72,6 +72,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="odls_finder.cpp" />
+    <ClCompile Include="odls_sequential.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="odls_sequential.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
