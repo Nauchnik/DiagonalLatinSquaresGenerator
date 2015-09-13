@@ -19,8 +19,9 @@
 
 odls_pseudotriple best_total_pseudotriple;
 
-void ControlProcess(int rank, int corecount, odls_sequential odls_seq);
-void ComputingProcess(int rank, int corecount, odls_sequential odls_seq);
+void controlProcess(int rank, int corecount, odls_sequential odls_seq);
+void computingProcess(int rank, int corecount, odls_sequential odls_seq);
+void updateFragmentFile(std::vector<fragment_data> total_fragment_data, double mpi_start_time);
 
 int main(int argc, char **argv)
 {
@@ -64,16 +65,17 @@ int main(int argc, char **argv)
 		// MPI searching for DLS and constucting pseudotriples
 		std::cout << "MPI searching for DLS and constucting pseudotriples" << std::endl;
 		if (rank == 0)
-			ControlProcess(rank, corecount, odls_seq);
+			controlProcess(rank, corecount, odls_seq);
 		else
-			ComputingProcess(rank, corecount, odls_seq);
+			computingProcess(rank, corecount, odls_seq);
 	}
 	
 	return 0;
 }
 
-void ControlProcess(int rank, int corecount, odls_sequential odls_seq)
+void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 {
+	double mpi_start_time = MPI_Wtime();
 	std::cout << "ControlProcess()" << std::endl;
 	std::chrono::high_resolution_clock::time_point t1, t2, finding_new_bkv_start_time, now_time, total_start_time;
 	std::chrono::duration<double> time_span;
@@ -87,7 +89,7 @@ void ControlProcess(int rank, int corecount, odls_sequential odls_seq)
 	
 	MPI_Status status;
 	MPI_Request request;
-	double mpi_start_time = MPI_Wtime();
+	mpi_start_time = MPI_Wtime();
 	int fragment_index_to_send = corecount - 1;
 	
 	char psuedotriple_char_arr[psuedotriple_char_arr_len];
@@ -171,6 +173,7 @@ void ControlProcess(int rank, int corecount, odls_sequential odls_seq)
 			ofile << out_sstream.str();
 			ofile.close();
 			out_sstream.clear(); out_sstream.str("");
+			updateFragmentFile(total_fragment_data, mpi_start_time);
 			continue;
 		}
 		else if ((orthogonal_value_from_computing_process > 0) && (orthogonal_value_from_computing_process <= LS_order*LS_order)) { // if new local BKV was received
@@ -178,31 +181,15 @@ void ControlProcess(int rank, int corecount, odls_sequential odls_seq)
 			MPI_Recv(psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
 			MPI_Recv(&odls_seq.first_dls_generate_time, 1, MPI_DOUBLE, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
 			MPI_Recv(&odls_seq.generated_DLS_count, 1, MPI_UNSIGNED_LONG_LONG, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
+			total_fragment_data[fragment_index_from_computing_process].first_dls_generate_time = odls_seq.first_dls_generate_time;
+			total_fragment_data[fragment_index_from_computing_process].generated_DLS_count = odls_seq.generated_DLS_count;
+			total_fragment_data[fragment_index_from_computing_process].orthogonal_value = orthogonal_value_from_computing_process;
+			updateFragmentFile(total_fragment_data, mpi_start_time);
 		}
 		else {
 			std::cerr << " incorrect orthogonal_value_from_computing_process value " << orthogonal_value_from_computing_process << std::endl;
 			MPI_Abort(MPI_COMM_WORLD, 0);
 		}
-		
-		// write to file current state for every fragment
-		total_fragment_data[fragment_index_from_computing_process].first_dls_generate_time = odls_seq.first_dls_generate_time;
-		total_fragment_data[fragment_index_from_computing_process].generated_DLS_count = odls_seq.generated_DLS_count;
-		total_fragment_data[fragment_index_from_computing_process].orthogonal_value = orthogonal_value_from_computing_process;
-		std::ofstream fragment_file("fragment_file", std::ios_base::out);
-		fragment_file << "total_data_from_fragment " << MPI_Wtime() - mpi_start_time << " seconds from start " << std::endl;
-		fragment_file << "fragment_index first_dls_generate_time genereated_DLS_count orthogonal_value result time" << std::endl;
-		unsigned k = 0;
-		for (auto &x : total_fragment_data) {
-			fragment_file << k++ << " " << x.first_dls_generate_time << " s " << x.generated_DLS_count << " " << x.orthogonal_value << " " << x.result << " ";
-			if (x.result != 0)// if fragment was finished
-				fragment_file << x.end_processing_time - x.start_processing_time << " s "; 
-			else
-				fragment_file << "in progress";
-			fragment_file << std::endl;
-		}
-		
-		fragment_file.close();
-		fragment_file.clear();
 		
 		char_index = 0;
 		for (int i = 0; i < LS_order; i++)
@@ -295,7 +282,7 @@ void ControlProcess(int rank, int corecount, odls_sequential odls_seq)
 	}
 }
 
-void ComputingProcess(int rank, int corecount, odls_sequential odls_seq)
+void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 {
 	std::vector<odls_pair> odls_pair_vec;
 	
@@ -394,4 +381,23 @@ void ComputingProcess(int rank, int corecount, odls_sequential odls_seq)
 		MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&result, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 	}
+}
+
+// write to file current state for every fragment
+void updateFragmentFile(std::vector<fragment_data> total_fragment_data, double mpi_start_time )
+{
+	std::ofstream fragment_file("fragment_file", std::ios_base::out);
+	fragment_file << "total_data_from_fragment " << MPI_Wtime() - mpi_start_time << " seconds from start " << std::endl;
+	fragment_file << "fragment_index first_dls_generate_time genereated_DLS_count orthogonal_value result time" << std::endl;
+	unsigned k = 0;
+	for (auto &x : total_fragment_data) {
+		fragment_file << k++ << " " << x.first_dls_generate_time << " s " << x.generated_DLS_count << " " << x.orthogonal_value << " " << x.result << " ";
+		if (x.result != 0)// if fragment was finished
+			fragment_file << x.end_processing_time - x.start_processing_time << " s ";
+		else
+			fragment_file << "in progress";
+		fragment_file << std::endl;
+	}
+	fragment_file.close();
+	fragment_file.clear();
 }
