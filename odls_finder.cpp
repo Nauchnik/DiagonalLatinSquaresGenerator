@@ -84,7 +84,7 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 	if (number_of_comb < corecount - 1) {
 		std::cerr << "number_of_comb < corecount - 1" << std::endl;
 		std::cerr << number_of_comb << " < " << corecount - 1 << std::endl;
-		exit(1);
+		MPI_Abort(MPI_COMM_WORLD, 0);
 	}
 	
 	MPI_Status status;
@@ -146,7 +146,7 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			result_from_computing_process = orthogonal_value_from_computing_process;
 
 			// if a result from a computing process was received already, do nothing
-			if (total_fragment_data[fragment_index_to_send].result != 0)
+			if (total_fragment_data[fragment_index_from_computing_process].result != 0)
 				continue;
 			
 			solved_tasks_count++;
@@ -169,6 +169,7 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			if (solved_tasks_count != no_dls_stopped_count + low_local_bkv_stopped_count) {
 				std::cerr << "solved_tasks_count != no_dls_stopped_count + low_local_bkv_stopped_count" << std::endl;
 				std::cerr << solved_tasks_count << " != " << no_dls_stopped_count + low_local_bkv_stopped_count << std::endl;
+				MPI_Abort(MPI_COMM_WORLD, 0);
 			}
 			
 			// send new task if there are free ones
