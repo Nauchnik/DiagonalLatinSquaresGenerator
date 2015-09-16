@@ -372,7 +372,7 @@ int odls_sequential::deterministicGeneratingDLS(std::vector<odls_pair> &odls_pai
 	int number_of_comb_in_one_part = 1;
 	MPI_Status mpi_status;
 	MPI_Request mpi_request;
-
+	
 #ifndef _MPI
 	std::chrono::duration<double> time_span;
 	std::chrono::high_resolution_clock::time_point current_time;
@@ -1023,29 +1023,6 @@ int odls_sequential::deterministicGeneratingDLS(std::vector<odls_pair> &odls_pai
 																																																																																	}
 																																																																																	for (square[80] = 0; ((square[80] < 10) && (flag[79] == 1)); square[80]++) /*инициализцая 80 элемента*/
 																																																																																	{
-																																																																																		// wait some time, then check for interrupting conditions
-#ifdef _MPI
-																																																																																		elapsed_time = MPI_Wtime() - dls_generate_start_time;
-#else
-																																																																																		current_time = std::chrono::high_resolution_clock::now();
-																																																																																		time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_time - dls_generate_start_time);
-																																																																																		elapsed_time = time_span.count();
-#endif
-																																																																																		if (elapsed_time >= WAIT_FIRST_RESULTS_SECONDS) {
-																																																																																			if (!generated_DLS_count)
-																																																																																				return STOP_DUE_NO_DLS;
-																																																																																			else {
-																																																																																				iprobe_message = 0;
-																																																																																				MPI_Iprobe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &iprobe_message, &mpi_status);
-																																																																																				// if message from control process exists
-																																																																																				if (iprobe_message) {
-																																																																																					MPI_Irecv(&bkv_from_control_process, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &mpi_request);
-																																																																																					bkv_from_control_process = abs(bkv_from_control_process);
-																																																																																					if ((unsigned)bkv_from_control_process > best_all_dls_psudotriple.unique_orthogonal_cells.size() + MAX_DIFF_VALUE_FROM_BKV)
-																																																																																						return STOP_DUE_LOW_LOCAL_BKV;
-																																																																																				}
-																																																																																			}
-																																																																																		}
 																																																																																		if ((square[80] != square[70]) && (square[80] != square[60]) && (square[80] != square[50]) && (square[80] != square[40]) && (square[80] != square[30]) && (square[80] != square[20]) && (square[80] != square[10]) && (square[80] != square[0]))
 																																																																																		{
 																																																																																			flag[80] = 1;
@@ -1058,6 +1035,30 @@ int odls_sequential::deterministicGeneratingDLS(std::vector<odls_pair> &odls_pai
 																																																																																			}
 																																																																																			for (square[82] = 0; ((square[82] < 10) && (flag[81] == 1)); square[82]++) /*инициализцая 82 элемента*/
 																																																																																			{
+																																																																																				// wait some time, then check for interrupting conditions
+#ifdef _MPI
+																																																																																				elapsed_time = MPI_Wtime() - dls_generate_start_time;
+#else
+																																																																																				current_time = std::chrono::high_resolution_clock::now();
+																																																																																				time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_time - dls_generate_start_time);
+																																																																																				elapsed_time = time_span.count();
+#endif
+																																																																																				if (elapsed_time >= WAIT_FIRST_RESULTS_SECONDS) {
+																																																																																					if (!generated_DLS_count)
+																																																																																						return STOP_DUE_NO_DLS;
+																																																																																					else {
+																																																																																						iprobe_message = 0;
+																																																																																						MPI_Iprobe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &iprobe_message, &mpi_status);
+																																																																																						// if message from control process exists
+																																																																																						if (iprobe_message) {
+																																																																																							MPI_Irecv(&bkv_from_control_process, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &mpi_request);
+																																																																																							bkv_from_control_process = abs(bkv_from_control_process);
+																																																																																						}
+																																																																																						// we could receive bkv_from_control_process later, check it
+																																																																																						if ((unsigned)bkv_from_control_process > best_all_dls_psudotriple.unique_orthogonal_cells.size() + MAX_DIFF_VALUE_FROM_BKV)
+																																																																																							return STOP_DUE_LOW_LOCAL_BKV;
+																																																																																					}
+																																																																																				}
 																																																																																				if ((square[82] != square[81]) && (square[82] != square[80]) && (square[82] != square[72]) && (square[82] != square[62]) && (square[82] != square[52]) && (square[82] != square[42]) && (square[82] != square[32]) && (square[82] != square[22]) && (square[82] != square[12]) && (square[82] != square[2]))
 																																																																																				{
 																																																																																					flag[82] = 1;

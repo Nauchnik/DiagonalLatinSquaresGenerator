@@ -144,6 +144,11 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			( orthogonal_value_from_computing_process == STOP_DUE_LOW_LOCAL_BKV))
 		{
 			result_from_computing_process = orthogonal_value_from_computing_process;
+
+			// if a result from a computing process was received already, do nothing
+			if (total_fragment_data[fragment_index_to_send].result != 0)
+				continue;
+			
 			solved_tasks_count++;
 			out_sstream << "solved_tasks_count " << solved_tasks_count << std::endl;
 			std::cout << "solved_tasks_count " << solved_tasks_count << std::endl;
@@ -160,6 +165,11 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			}
 			out_sstream << "no_dls_stopped_count " << no_dls_stopped_count << std::endl;
 			out_sstream << "low_local_bkv_stopped_count " << low_local_bkv_stopped_count << std::endl;
+			
+			if (solved_tasks_count != no_dls_stopped_count + low_local_bkv_stopped_count) {
+				std::cerr << "solved_tasks_count != no_dls_stopped_count + low_local_bkv_stopped_count" << std::endl;
+				std::cerr << solved_tasks_count << " != " << no_dls_stopped_count + low_local_bkv_stopped_count << std::endl;
+			}
 			
 			// send new task if there are free ones
 			if ( fragment_index_to_send < number_of_comb ) {
@@ -328,20 +338,25 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 	int value_from_control_process;
 	int bkv_from_control_process;
 	int fragment_index = 0;
-	
+	bool isMessageSent;
+
 	// repeat solving tasks from control process
 	for (;;) {
 		old_fragment_index = fragment_index;
 		// firstly check messages with current BKV
+		isMessageSent = false;
 		do {
 			MPI_Recv(&value_from_control_process, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
 			if (value_from_control_process < 0) {
 				bkv_from_control_process = abs(value_from_control_process);
 				if ((unsigned)bkv_from_control_process > odls_seq.best_all_dls_psudotriple.unique_orthogonal_cells.size() + MAX_DIFF_VALUE_FROM_BKV) {
 					result = STOP_DUE_LOW_LOCAL_BKV;
-					// result > 0, i.e. task solving was interrupted, ask for new task
-					MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-					MPI_Send(&result, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+					if (!isMessageSent) {
+						// result > 0, i.e. task solving was interrupted, ask for new task
+						MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+						MPI_Send(&result, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+						isMessageSent = true;
+					}
 				}
 			}
 		} while (value_from_control_process < 0);
