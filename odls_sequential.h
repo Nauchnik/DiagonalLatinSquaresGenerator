@@ -69,7 +69,6 @@ public:
 	double first_dls_generate_time;
 	void readOdlsPairs(std::vector<odls_pair> &odls_pair_vec);
 	void makePseudotriple(odls_pair &orthogonal_pair, dls &new_dls, odls_pseudotriple &pseudotriple);
-	void constructPseudotripleCNFs(std::string pseudotriple_template_cnf_name, bool isPairsUsing);
 	int deterministicGeneratingDLS(std::vector<odls_pair> &odls_pair_vec, unsigned fragment_index); // Alexey Zhuravlev function
 	void processNewDLS(std::vector<odls_pair> &odls_pair_vec, int fragment_index, unsigned short int *square);
 };

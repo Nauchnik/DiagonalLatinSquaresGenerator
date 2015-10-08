@@ -45,30 +45,12 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	
-	std::string str;
-	
-	if (argc >= 2) {
-		std::string pseudotriple_template_cnf_name = argv[1];
-		std::cout << "constructPseudotripleCNFs()" << std::endl;
-		bool isPairsUsing = true;
-		std::string nopairs_str;
-		if (argc == 3) {
-			std::cout << "argv[2] " << argv[2] << std::endl;
-			nopairs_str = argv[2];
-			if (nopairs_str == "-no_pairs")
-				isPairsUsing = false;
-		}
-		std::cout << "isPairsUsing " << isPairsUsing << std::endl;
-		odls_seq.constructPseudotripleCNFs(pseudotriple_template_cnf_name, isPairsUsing);
-	}
-	else {
-		// MPI searching for DLS and constucting pseudotriples
-		std::cout << "MPI searching for DLS and constucting pseudotriples" << std::endl;
-		if (rank == 0)
-			controlProcess(rank, corecount, odls_seq);
-		else
-			computingProcess(rank, corecount, odls_seq);
-	}
+	// MPI searching for DLS and constucting pseudotriples
+	std::cout << "MPI searching for DLS and constucting pseudotriples" << std::endl;
+	if (rank == 0)
+		controlProcess(rank, corecount, odls_seq);
+	else
+		computingProcess(rank, corecount, odls_seq);
 	
 	return 0;
 }
