@@ -4,7 +4,7 @@
 
 #include "odls_sequential.h"
 
-odls_sequential::odls_sequential () :
+odls_sequential::odls_sequential() :
 	dls_generate_start_time (0),
 	dls_generate_last_time(0),
 	generated_DLS_count(0),
@@ -113,8 +113,7 @@ void odls_sequential::makePseudotriple(odls_pair &orthogonal_pair, dls &new_dls,
 
 void odls_sequential::processNewDLS(std::vector<odls_pair> &odls_pair_vec, int fragment_index, unsigned short int *square)
 {
-	std::chrono::high_resolution_clock::time_point now_time, prev_time;
-	std::chrono::duration<double> time_span;
+#ifdef _MPI
 	std::string cur_string_set;
 	unsigned k;
 	std::stringstream sstream;
@@ -125,31 +124,24 @@ void odls_sequential::processNewDLS(std::vector<odls_pair> &odls_pair_vec, int f
 	unsigned char_index;
 	unsigned ortogonal_cells;
 
-#ifdef _MPI
 	dls_total_time += MPI_Wtime() - dls_generate_last_time;
-#else
-	now_time = std::chrono::high_resolution_clock::now();
-	time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - dls_generate_last_time);
-	dls_total_time += time_span.count();
-#endif
 
 	// time for generating first DLS
 	if (generated_DLS_count == 0)
-		first_dls_generate_time = time_span.count();
-#ifdef _MPI
+		first_dls_generate_time = MPI_Wtime() - dls_generate_last_time;
+
 	dls_generate_last_time = MPI_Wtime();
-#else
-	dls_generate_last_time = now_time;
-#endif
+
 	// here we have diagonal Latin square, let's add it to the set
 	generated_DLS_count++;
+
 	if (generated_DLS_count == 1)
 		first_dls_generate_time = MPI_Wtime() - dls_generate_start_time;
 	
 	k = 0;
 	cur_string_set = "";
 
-	prev_time = std::chrono::high_resolution_clock::now();
+	prev_time = MPI_Wtime();
 
 	for (int j1 = 0; j1 < LS_order; j1++) {
 		for (int j2 = 0; j2 < LS_order; j2++)
@@ -174,13 +166,9 @@ void odls_sequential::processNewDLS(std::vector<odls_pair> &odls_pair_vec, int f
 		best_all_dls_psudotriple = best_one_dls_psudotriple;
 		std::cout << "***" << std::endl;
 		std::cout << "best_all_dls_psudotriple_orthogonal_cells " << best_all_dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
-		now_time = std::chrono::high_resolution_clock::now();
-#ifdef _MPI
+
 		std::cout << "time from start " << MPI_Wtime() - dls_generate_start_time << std::endl;
-#else
-		time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - dls_generate_start_time);
-		std::cout << "time from start " << time_span.count() << std::endl;
-#endif
+
 		std::cout << "genereated_DLS_count " << generated_DLS_count << std::endl;
 		std::cout << "dls_total_time " << dls_total_time << std::endl;
 		std::cout << "pseudotriples_total_time " << pseudotriples_total_time << std::endl;
@@ -202,15 +190,15 @@ void odls_sequential::processNewDLS(std::vector<odls_pair> &odls_pair_vec, int f
 		MPI_Send(&first_dls_generate_time, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&generated_DLS_count, 1, MPI_UNSIGNED_LONG_LONG, 0, 0, MPI_COMM_WORLD);
 	}
-
-	now_time = std::chrono::high_resolution_clock::now();
-	time_span = std::chrono::duration_cast<std::chrono::duration<double>>(now_time - prev_time);
-	pseudotriples_total_time += time_span.count();
+	
+	pseudotriples_total_time += MPI_Wtime() - prev_time;
+#endif
 }
 
 // ДЛК находится в square[100]( а именнно square[0]-square[99]) в момент времени отмеченный коментарием на 774 строчке
 int odls_sequential::deterministicGeneratingDLS(std::vector<odls_pair> &odls_pair_vec, unsigned fragment_index)
 {
+#ifdef _MPI
 	unsigned short int square[100] = { 0 };
 	unsigned short int flag[100] = { 0 };
 	unsigned short int start[15] = { 0 };
@@ -225,25 +213,20 @@ int odls_sequential::deterministicGeneratingDLS(std::vector<odls_pair> &odls_pai
 	int i = 0;
 	int j = 0;
 	int number_of_comb_in_one_part = 1;
+	
+#ifdef _MPI
 	MPI_Status mpi_status;
 	MPI_Request mpi_request;
-	
-#ifndef _MPI
-	std::chrono::duration<double> time_span;
-	std::chrono::high_resolution_clock::time_point current_time;
 #endif
+	
 	double elapsed_time;
 
 	int iprobe_message = 0, message_size = 0;
 	int bkv_from_control_process = 0;
 
-#ifdef _MPI
 	dls_generate_start_time = MPI_Wtime();
 	dls_generate_last_time = MPI_Wtime();
-#else
-	dls_generate_start_time = std::chrono::high_resolution_clock::now();
-	dls_generate_last_time = std::chrono::high_resolution_clock::now();
-#endif
+
 	std::cout << "Start of generating DLS" << std::endl;
 
 	generated_DLS_count = 0;
@@ -891,13 +874,8 @@ int odls_sequential::deterministicGeneratingDLS(std::vector<odls_pair> &odls_pai
 																																																																																			for (square[82] = 0; ((square[82] < 10) && (flag[81] == 1)); square[82]++) /*инициализцая 82 элемента*/
 																																																																																			{
 																																																																																				// wait some time, then check for interrupting conditions
-#ifdef _MPI
 																																																																																				elapsed_time = MPI_Wtime() - dls_generate_start_time;
-#else
-																																																																																				current_time = std::chrono::high_resolution_clock::now();
-																																																																																				time_span = std::chrono::duration_cast<std::chrono::duration<double>>(current_time - dls_generate_start_time);
-																																																																																				elapsed_time = time_span.count();
-#endif
+																																																																																				
 																																																																																				if (elapsed_time >= WAIT_FIRST_RESULTS_SECONDS) {
 																																																																																					if (!generated_DLS_count)
 																																																																																						return STOP_DUE_NO_DLS;
@@ -1221,6 +1199,6 @@ int odls_sequential::deterministicGeneratingDLS(std::vector<odls_pair> &odls_pai
 			}
 		}
 	}
-
+#endif
 	return 0;
 }

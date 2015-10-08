@@ -51,13 +51,8 @@ struct fragment_data{
 class odls_sequential
 {
 private:
-#ifdef _MPI
 	double dls_generate_start_time;
 	double dls_generate_last_time;
-#else
-	std::chrono::high_resolution_clock::time_point dls_generate_start_timeæ
-	std::chrono::high_resolution_clock::time_point dls_generate_last_time;
-#endif
 public:
 	odls_sequential();
 	odls_pseudotriple best_one_dls_psudotriple;
