@@ -277,9 +277,10 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 
 void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 {
+	std::string known_podls_file_name = "ODLS_10_pairs.txt";
 	std::vector<odls_pair> odls_pair_vec;
-	
-	odls_seq.readOdlsPairs(odls_pair_vec);
+
+	odls_seq.readOdlsPairs(known_podls_file_name, odls_pair_vec);
 	
 	// check pseudotriples based on known DLS from pairs
 	unsigned preprocess_bkv = 0;

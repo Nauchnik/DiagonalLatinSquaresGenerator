@@ -14,12 +14,11 @@ odls_sequential::odls_sequential() :
 {
 }
 
-void odls_sequential::readOdlsPairs(std::vector<odls_pair> &odls_pair_vec)
+void odls_sequential::readOdlsPairs(std::string known_podls_file_name, std::vector<odls_pair> &odls_pair_vec)
 {
-	std::string odls_pairs_file_name = "ODLS_10_pairs.txt";
-	std::ifstream odls_pairs_file(odls_pairs_file_name);
+	std::ifstream odls_pairs_file(known_podls_file_name.c_str());
 	if (!odls_pairs_file.is_open()) {
-		std::cerr << odls_pairs_file_name << " is not open" << std::endl;
+		std::cerr << known_podls_file_name << " is not open" << std::endl;
 		exit(1);
 	}
 	std::string str, nonspace_str;
@@ -141,7 +140,7 @@ void odls_sequential::processNewDLS(std::vector<odls_pair> &odls_pair_vec, int f
 	k = 0;
 	cur_string_set = "";
 
-	prev_time = MPI_Wtime();
+	double prev_time = MPI_Wtime();
 
 	for (int j1 = 0; j1 < LS_order; j1++) {
 		for (int j2 = 0; j2 < LS_order; j2++)
