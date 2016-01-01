@@ -13,6 +13,7 @@
 #include <sstream>
 #include <fstream>
 #include <algorithm>
+#include <iterator>
 
 typedef std::vector<std::string> dls;
 
