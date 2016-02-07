@@ -17,13 +17,13 @@
 
 typedef std::vector<std::string> dls;
 
-const unsigned LS_order = 10;
-const unsigned psuedotriple_char_arr_len = 3 * LS_order * LS_order;
-const unsigned number_of_comb = 15953; // 72356
+const unsigned LS_ORDER = 10;
+const unsigned psuedotriple_char_arr_len = 3 * LS_ORDER * LS_ORDER;
+const unsigned number_of_comb = 2445393; // 15953 72356
 const int STOP_DUE_NO_DLS = -1;
 const int STOP_DUE_LOW_LOCAL_BKV = -2;
-const double WAIT_FIRST_RESULTS_SECONDS = 1800;
-const double WAIT_FINAL_PROCESS_SECONDS = 36000;
+//const double WAIT_FIRST_RESULTS_SECONDS = 1800;
+//const double WAIT_FINAL_PROCESS_SECONDS = 36000;
 const unsigned MAX_DIFF_VALUE_FROM_BKV = 7;
 
 struct odls_pair
