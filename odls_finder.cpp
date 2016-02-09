@@ -63,9 +63,9 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 	std::chrono::duration<double> time_span;
 	total_start_time = std::chrono::high_resolution_clock::now();
 	
-	if (number_of_comb < corecount - 1) {
+	if (NUMBER_OF_COMB < corecount - 1) {
 		std::cerr << "number_of_comb < corecount - 1" << std::endl;
-		std::cerr << number_of_comb << " < " << corecount - 1 << std::endl;
+		std::cerr << NUMBER_OF_COMB << " < " << corecount - 1 << std::endl;
 		MPI_Abort(MPI_COMM_WORLD, 0);
 	}
 	
@@ -77,7 +77,7 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 	char psuedotriple_char_arr[psuedotriple_char_arr_len];
 	std::ofstream ofile;
 	std::vector<fragment_data> total_fragment_data;
-	total_fragment_data.resize(number_of_comb);
+	total_fragment_data.resize(NUMBER_OF_COMB);
 	for (auto &x : total_fragment_data) {
 		x.first_dls_generate_time = 0;
 		x.generated_DLS_count = 0;
@@ -97,15 +97,15 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 	std::stringstream out_sstream;
 	unsigned char_index;
 	odls_pair cur_pair;
-	cur_pair.dls_1.resize(LS_order);
+	cur_pair.dls_1.resize(LS_ORDER);
 	for( auto &x : cur_pair.dls_1 )
-		x.resize(LS_order);
-	cur_pair.dls_2.resize(LS_order);
+		x.resize(LS_ORDER);
+	cur_pair.dls_2.resize(LS_ORDER);
 	for( auto &x : cur_pair.dls_2 )
-		x.resize(LS_order);
-	new_dls.resize(LS_order);
+		x.resize(LS_ORDER);
+	new_dls.resize(LS_ORDER);
 	for( auto &x : new_dls )
-		x.resize(LS_order);
+		x.resize(LS_ORDER);
 	
 	int orthogonal_value_from_computing_process = 0;
 	int fragment_index_from_computing_process = 0;
@@ -116,7 +116,7 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 	t1 = std::chrono::high_resolution_clock::now();
 
 	// start of receiving results and sending new tasks instead
-	while (solved_tasks_count < number_of_comb) {
+	while (solved_tasks_count < NUMBER_OF_COMB) {
 		//std::cout << "process " << rank << " before recieving" << std::endl;
 		MPI_Recv( &fragment_index_from_computing_process, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
 		MPI_Recv( &orthogonal_value_from_computing_process, 1, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
@@ -155,7 +155,7 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			}
 			
 			// send new task if there are free ones
-			if ( fragment_index_to_send < number_of_comb ) {
+			if ( fragment_index_to_send < NUMBER_OF_COMB ) {
 				MPI_Send(&fragment_index_to_send, 1, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD);
 				total_fragment_data[fragment_index_to_send].start_processing_time = MPI_Wtime();
 				out_sstream << "fragment_index_to_send " << fragment_index_to_send << " was sent" << std::endl;
@@ -169,7 +169,7 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			updateFragmentFile(total_fragment_data, mpi_start_time);
 			continue;
 		}
-		else if ((orthogonal_value_from_computing_process > 0) && (orthogonal_value_from_computing_process <= LS_order*LS_order)) { // if new local BKV was received
+		else if ((orthogonal_value_from_computing_process > 0) && (orthogonal_value_from_computing_process <= LS_ORDER*LS_ORDER)) { // if new local BKV was received
 			//std::cout << "process " << rank << " recieved " << orthogonal_value_from_message << std::endl;
 			MPI_Recv(psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
 			MPI_Recv(&odls_seq.first_dls_generate_time, 1, MPI_DOUBLE, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
@@ -185,14 +185,14 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 		}
 		
 		char_index = 0;
-		for (int i = 0; i < LS_order; i++)
-			for (int j = 0; j < LS_order; j++)
+		for (int i = 0; i < LS_ORDER; i++)
+			for (int j = 0; j < LS_ORDER; j++)
 				cur_pair.dls_1[i][j] = psuedotriple_char_arr[char_index++];
-		for (int i = 0; i < LS_order; i++)
-			for (int j = 0; j < LS_order; j++)
+		for (int i = 0; i < LS_ORDER; i++)
+			for (int j = 0; j < LS_ORDER; j++)
 				cur_pair.dls_2[i][j] = psuedotriple_char_arr[char_index++];
-		for (int i = 0; i < LS_order; i++)
-			for (int j = 0; j < LS_order; j++)
+		for (int i = 0; i < LS_ORDER; i++)
+			for (int j = 0; j < LS_ORDER; j++)
 				new_dls[i][j] = psuedotriple_char_arr[char_index++];
 		odls_seq.makePseudotriple(cur_pair, new_dls, odls_seq.dls_psudotriple);
 		out_sstream << "dls_psudotriple.unique_orthogonal_cells.size() " << odls_seq.dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
@@ -249,7 +249,7 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			out_sstream.clear(); out_sstream.str("");
 		}
 		// check if it's time to stop program
-		if (number_of_comb - solved_tasks_count < (unsigned)(corecount - 1)) {
+		/*if (NUMBER_OF_COMB - solved_tasks_count < (unsigned)(corecount - 1)) {
 			// there are some idle processes right now
 			// check of every task was processed with enough time
 			bool isTimeToInturrupt = true;
@@ -257,7 +257,7 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			for (auto &x : total_fragment_data) {
 				if (x.end_processing_time == 0.0) {
 					final_tasks_count++;
-					if (MPI_Wtime() - x.start_processing_time < WAIT_FINAL_PROCESS_SECONDS)
+					if (MPI_Wtime() - x.start_processing_time < WAIT_)
 						isTimeToInturrupt = false;
 				}
 			}
@@ -271,7 +271,7 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 				ofile.close();
 				out_sstream.clear(); out_sstream.str("");
 			}
-		}
+		}*/
 	}
 }
 
@@ -280,7 +280,7 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 	std::string known_podls_file_name = "ODLS_10_pairs.txt";
 	std::vector<odls_pair> odls_pair_vec;
 
-	odls_seq.readOdlsPairs(known_podls_file_name, odls_pair_vec);
+	odls_seq.readOdlsPairs(known_podls_file_name);
 	
 	// check pseudotriples based on known DLS from pairs
 	unsigned preprocess_bkv = 0;
@@ -354,8 +354,7 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 			exit(1);
 		}
 		
-		// TODO for Alexey: launch deterministic_generate_dls for short time - for checking conditions
-		result = odls_seq.deterministicGeneratingDLS(odls_pair_vec, fragment_index);
+		result = odls_seq.deterministicGeneratingDLS(fragment_index);
 		
 		odls_seq.best_all_dls_psudotriple.unique_orthogonal_cells.clear();
 		odls_seq.best_one_dls_psudotriple.unique_orthogonal_cells.clear();
