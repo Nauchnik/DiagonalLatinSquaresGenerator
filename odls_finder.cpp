@@ -59,9 +59,9 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 {
 	double mpi_start_time = MPI_Wtime();
 	std::cout << "ControlProcess()" << std::endl;
-	std::chrono::high_resolution_clock::time_point t1, t2, finding_new_bkv_start_time, now_time, total_start_time;
+	double t1, t2, finding_new_bkv_start_time, total_start_time;
 	std::chrono::duration<double> time_span;
-	total_start_time = std::chrono::high_resolution_clock::now();
+	total_start_time = MPI_Wtime();
 	
 	if (NUMBER_OF_COMB < corecount - 1) {
 		std::cerr << "number_of_comb < corecount - 1" << std::endl;
@@ -113,14 +113,21 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 	int current_bkv_neg = -100;
 	int result_from_computing_process = 0;
 	unsigned no_dls_stopped_count = 0, low_local_bkv_stopped_count = 0;
-	t1 = std::chrono::high_resolution_clock::now();
+	t1 = MPI_Wtime();
+	unsigned bkv;
 
 	// start of receiving results and sending new tasks instead
 	while (solved_tasks_count < NUMBER_OF_COMB) {
 		//std::cout << "process " << rank << " before recieving" << std::endl;
 		MPI_Recv( &fragment_index_from_computing_process, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
 		MPI_Recv( &orthogonal_value_from_computing_process, 1, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
-		
+
+		if (fragment_index_from_computing_process == -1) { // just a comparison of local and global bkv
+			bkv = best_total_pseudotriple.unique_orthogonal_cells.size();
+			MPI_Send(&bkv, 1, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD);
+			continue;
+		}
+
 		// if processing of a task was interrupted, then send new task on a freed process
 		if (( orthogonal_value_from_computing_process == STOP_DUE_NO_DLS) ||
 			( orthogonal_value_from_computing_process == STOP_DUE_LOW_LOCAL_BKV))
@@ -138,13 +145,11 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			total_fragment_data[fragment_index_from_computing_process].end_processing_time = MPI_Wtime();
 			total_fragment_data[fragment_index_from_computing_process].result = result_from_computing_process;
 			
-			no_dls_stopped_count = low_local_bkv_stopped_count = 0;
-			for (auto &x : total_fragment_data) {
-				if (x.result == STOP_DUE_NO_DLS)
-					no_dls_stopped_count++;
-				else if (x.result == STOP_DUE_LOW_LOCAL_BKV)
-					low_local_bkv_stopped_count++;
-			}
+			if (orthogonal_value_from_computing_process == STOP_DUE_NO_DLS)
+				no_dls_stopped_count++;
+			else if (orthogonal_value_from_computing_process == STOP_DUE_LOW_LOCAL_BKV)
+				low_local_bkv_stopped_count++;
+
 			out_sstream << "no_dls_stopped_count " << no_dls_stopped_count << std::endl;
 			out_sstream << "low_local_bkv_stopped_count " << low_local_bkv_stopped_count << std::endl;
 			
@@ -214,13 +219,11 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			for (int i = 0; i < corecount - 1; i++)
 				MPI_Isend(&current_bkv_neg, 1, MPI_INT, i + 1, 0, MPI_COMM_WORLD, &request); 
 			
-			t2 = std::chrono::high_resolution_clock::now();
-			time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-			t1 = t2;
+			t2 = MPI_Wtime();
 			out_sstream << std::endl << "new total_bkv " << best_total_pseudotriple.unique_orthogonal_cells.size() << std::endl;
-			out_sstream << "time from previous BKV " << time_span.count() << std::endl;
-			time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - total_start_time);
-			out_sstream << "time from start " << time_span.count() << std::endl << std::endl; 
+			out_sstream << "time from previous BKV " << t2 - t1 << std::endl;
+			out_sstream << "time from start " << t2 - total_start_time << std::endl << std::endl;
+			t1 = t2;
 			for ( auto &x : best_total_pseudotriple.dls_1 ) {
 				for ( auto &y : x )
 					out_sstream << y << " ";
@@ -354,7 +357,7 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 			exit(1);
 		}
 		
-		result = odls_seq.deterministicGeneratingDLS(fragment_index);
+		result = odls_seq.generateDLS(fragment_index);
 		
 		odls_seq.best_all_dls_psudotriple.unique_orthogonal_cells.clear();
 		odls_seq.best_one_dls_psudotriple.unique_orthogonal_cells.clear();

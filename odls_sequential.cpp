@@ -111,7 +111,6 @@ void odls_sequential::makePseudotriple(odls_pair &orthogonal_pair, dls &new_dls,
 
 unsigned short odls_sequential::processNewDLS(int fragment_index, unsigned short int *square)
 {
-#ifdef _MPI
 	std::string cur_string_set;
 	unsigned k;
 	std::stringstream sstream;
@@ -190,39 +189,33 @@ unsigned short odls_sequential::processNewDLS(int fragment_index, unsigned short
 	}
 	
 	//pseudotriples_total_time += MPI_Wtime() - prev_time;
-#endif
+
 	return best_one_dls_psudotriple.unique_orthogonal_cells.size();
 }
 
-// ДЛК находится в square[100]( а именнно square[0]-square[99]) в момент времени отмеченный коментарием на 774 строчке
-int odls_sequential::deterministicGeneratingDLS(unsigned fragment_index)
-{
-	generateDLS(fragment_index);
-	
-	return 0;
-}
-
-void odls_sequential::compareLocalRecordWithGlobal(int count, int local_max)
+int odls_sequential::compareLocalRecordWithGlobal(int fragment_index, int local_max)
 {
 	//получить глобальный рекорд
-	//int global_max=твоя_функция_получения_глобального_максимума_ортогональности_среди_всех_областей();
-		
-	/*if(local_max>global_max)	
+	int global_max;
+	MPI_Status status;
+	
+	// ask for current global BKV
+	int tmp = -1;
+	MPI_Send(&tmp,       1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+	MPI_Send(&local_max, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+	// receive current global BKV
+	MPI_Recv(&global_max, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+	
+	if( local_max > global_max )	
 	{
-		global_max=local_max;
-		передача в глобальную область памяти нового рекорда
+		MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+		MPI_Send(&local_max, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 	}
-	else if((local_max<=global_max)&&(local_max>=global_max-DIFFER_GLOBAL_LOCAL))
-	{
-		count=0;
-	}
-	else
-	{
-		return(local_max);
-	}*/
+	else if ( local_max < global_max - MAX_DIFF_VALUE_FROM_BKV)
+		return STOP_DUE_LOW_LOCAL_BKV;
 }
 
-int odls_sequential::generateDLS(unsigned fragment_index)
+int odls_sequential::generateDLS(int fragment_index)
 {
 	unsigned short int square[100] = { 0 };
 	unsigned short int stl[10][10] = { 1 };
@@ -259,6 +252,7 @@ int odls_sequential::generateDLS(unsigned fragment_index)
 	else
 		fparts = finter;
 	number_of_comb_in_one_part = fparts;
+	int comparison_result = 0;
 
 	//обнуление квадратов и флагов перед генерацией областей ДЛК
 	for (i = 0; i<100; i++)
@@ -1463,8 +1457,11 @@ int odls_sequential::generateDLS(unsigned fragment_index)
 																																																																																																						if( cur_pseudotriple_characteristics > local_max )
 																																																																																																							local_max=cur_pseudotriple_characteristics;
 
-																																																																																																						if(count==NUM_OF_DLS_IN_ONE_CHECK)
-																																																																																																							compareLocalRecordWithGlobal(count, local_max);
+																																																																																																						if (count % NUM_OF_DLS_IN_ONE_CHECK == 0) {
+																																																																																																							comparison_result = compareLocalRecordWithGlobal(fragment_index, local_max);
+																																																																																																							if (comparison_result == STOP_DUE_LOW_LOCAL_BKV)
+																																																																																																								return STOP_DUE_LOW_LOCAL_BKV;
+																																																																																																						}
 
 																																																																																																						if (flag[98])
 																																																																																																						{

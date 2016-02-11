@@ -24,7 +24,7 @@ const int STOP_DUE_NO_DLS = -1;
 const int STOP_DUE_LOW_LOCAL_BKV = -2;
 //const double WAIT_FIRST_RESULTS_SECONDS = 1800;
 //const double WAIT_FINAL_PROCESS_SECONDS = 36000;
-const unsigned MAX_DIFF_VALUE_FROM_BKV = 7;
+const unsigned MAX_DIFF_VALUE_FROM_BKV = 5;
 const unsigned NUM_OF_DLS_IN_ONE_CHECK = 1000000;
 
 struct odls_pair
@@ -67,10 +67,9 @@ public:
 	double first_dls_generate_time;
 	void readOdlsPairs(std::string known_podls_file_name);
 	void makePseudotriple(odls_pair &orthogonal_pair, dls &new_dls, odls_pseudotriple &pseudotriple);
-	int deterministicGeneratingDLS(unsigned fragment_index); // Alexey Zhuravlev function
 	unsigned short processNewDLS(int fragment_index, unsigned short int *square);
-	void odls_sequential::compareLocalRecordWithGlobal(int count, int local_max);
-	int odls_sequential::generateDLS(unsigned fragment_index);
+	int compareLocalRecordWithGlobal(int fragment_index, int local_max);
+	int generateDLS(int fragment_index);
 };
 
 #endif
