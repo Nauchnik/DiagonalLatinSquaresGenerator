@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 #define NUM_OF_PARTS 2445393
-#define NUM_OF_DLK_IN_ONE_CHECK 1000000
+#define NUM_OF_DLK_IN_ONE_CHECK 1000
 #define DIFFER_GLOBAL_LOCAL 5
 
 unsigned long long int generate_dlk(int parts, int part)
@@ -1242,7 +1242,7 @@ if(flag[98])
 {
 	/* ДЛК сгенерирован*/
 count++;
-
+/*
 // тут расположить код проверки коэфициента ортогональности
 result=твоя_функция_проверки();
 
@@ -1250,11 +1250,13 @@ if(result>local_max)
 {
 	local_max=result;
 }
+*/
 
-if(count==NUM_OF_DLK_IN_ONE_CHECK)
+if(count % NUM_OF_DLK_IN_ONE_CHECK == 0)
 {
+	printf("count %d \n", count);
 	//получить глобальный рекорд
-	global_max=твоя_функция_получения_глобального_максимума_ортогональности_среди_всех_областей();
+	/*global_max=твоя_функция_получения_глобального_максимума_ортогональности_среди_всех_областей();
 	
 	if(local_max>global_max)	
 	{
@@ -1268,7 +1270,7 @@ if(count==NUM_OF_DLK_IN_ONE_CHECK)
 	else
 	{
 		return(local_max);
-	}
+	}*/
 }
 
 }

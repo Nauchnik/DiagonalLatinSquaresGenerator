@@ -38,7 +38,8 @@ int main(int argc, char **argv)
 	MPI_Comm_size( MPI_COMM_WORLD, &corecount );
 	MPI_Comm_rank( MPI_COMM_WORLD, &rank );
 
-	std::cout << "corecount " << corecount << std::endl;
+	if ( rank == 0 )
+		std::cout << "corecount " << corecount << std::endl;
 
 	if ( argc > 3 ) {
 		std::cerr << "Usage : [pseudotriple_template_cnf_name] [-no_pairs]";
@@ -46,7 +47,6 @@ int main(int argc, char **argv)
 	}
 	
 	// MPI searching for DLS and constucting pseudotriples
-	std::cout << "MPI searching for DLS and constucting pseudotriples" << std::endl;
 	if (rank == 0)
 		controlProcess(rank, corecount, odls_seq);
 	else
@@ -128,6 +128,11 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			continue;
 		}
 
+		if (orthogonal_value_from_computing_process == 0) {
+			std::cerr << "orthogonal_value_from_computing_process == 0" << std::endl;
+			MPI_Abort(MPI_COMM_WORLD, 0);
+		}
+		
 		// if processing of a task was interrupted, then send new task on a freed process
 		if (( orthogonal_value_from_computing_process == STOP_DUE_NO_DLS) ||
 			( orthogonal_value_from_computing_process == STOP_DUE_LOW_LOCAL_BKV))
@@ -183,10 +188,6 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			total_fragment_data[fragment_index_from_computing_process].generated_DLS_count = odls_seq.generated_DLS_count;
 			total_fragment_data[fragment_index_from_computing_process].orthogonal_value = orthogonal_value_from_computing_process;
 			updateFragmentFile(total_fragment_data, mpi_start_time);
-		}
-		else {
-			std::cerr << " incorrect orthogonal_value_from_computing_process value " << orthogonal_value_from_computing_process << std::endl;
-			MPI_Abort(MPI_COMM_WORLD, 0);
 		}
 		
 		char_index = 0;
@@ -281,34 +282,41 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 {
 	std::string known_podls_file_name = "ODLS_10_pairs.txt";
-	std::vector<odls_pair> odls_pair_vec;
 
 	odls_seq.readOdlsPairs(known_podls_file_name);
+
+	if ( rank == 1)
+		std::cout << "odls_seq.odls_pair_vec.size() " << odls_seq.odls_pair_vec.size() << std::endl;
 	
 	// check pseudotriples based on known DLS from pairs
 	unsigned preprocess_bkv = 0;
 	std::set<dls> dls_known;
-	for ( auto &x : odls_pair_vec ) {
+	for ( auto &x : odls_seq.odls_pair_vec ) {
 		dls_known.insert( x.dls_1 );
 		dls_known.insert( x.dls_2 );
 	}
+	if (rank == 1)
+		std::cout << "dls_known.size() " << dls_known.size() << std::endl;
 	
 	// on prerpocess make pseudotriples based on DLS from pairs 
 	dls tmp_dls;
 	odls_pseudotriple psudotriple;
-	for (auto &x : odls_pair_vec) {
+	for (auto &x : odls_seq.odls_pair_vec) {
 		for (auto &y : dls_known) {
 			tmp_dls = y;
 			if ((tmp_dls != x.dls_1) && (tmp_dls != x.dls_2)) {
 				odls_seq.makePseudotriple(x, tmp_dls, psudotriple);
 				if (psudotriple.unique_orthogonal_cells.size() >= preprocess_bkv) {
 					preprocess_bkv = psudotriple.unique_orthogonal_cells.size();
-					std::cout << "preprocess_bkv " << preprocess_bkv << std::endl;
+					if (rank == 1)
+						std::cout << "preprocess_bkv " << preprocess_bkv << std::endl;
 				}
 				// check Brown psuedotriple (2 pairs are orthogonal)
 				if ((x.dls_1[0] == "0946175823") &&
 					(x.dls_2[0] == "0851734692") &&
-					(tmp_dls[0] == "0419827356")) {
+					(tmp_dls[0] == "0419827356") &&
+					(rank == 1)) 
+				{	
 					std::cout << "Brown pseudotriple BKV " << psudotriple.unique_orthogonal_cells.size() << std::endl;
 					for (auto &x : psudotriple.unique_orthogonal_cells)
 						std::cout << x << " ";
@@ -317,7 +325,8 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 			}
 		}
 	}
-	std::cout << "preprocess_bkv based on known DLS from input file : " << preprocess_bkv << std::endl;
+	if ( rank == 1 )
+		std::cout << "preprocess_bkv based on known DLS from input file : " << preprocess_bkv << std::endl;
 	
 	MPI_Status status;
 	int old_fragment_index;
@@ -327,14 +336,14 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 	int fragment_index = 0;
 	bool isMessageSent;
 
-	// repeat solving tasks from control process
+	// repeat solving tasks from the control process
 	for (;;) {
 		old_fragment_index = fragment_index;
 		// firstly check messages with current BKV
 		isMessageSent = false;
 		do {
 			MPI_Recv(&value_from_control_process, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
-			if (value_from_control_process < 0) {
+			if (value_from_control_process < 0) { // message with new global BKV
 				bkv_from_control_process = abs(value_from_control_process);
 				if ((unsigned)bkv_from_control_process > odls_seq.best_all_dls_psudotriple.unique_orthogonal_cells.size() + MAX_DIFF_VALUE_FROM_BKV) {
 					result = STOP_DUE_LOW_LOCAL_BKV;
@@ -348,8 +357,8 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 			}
 		} while (value_from_control_process < 0);
 		
-		std::cout << "received fragment_index " << fragment_index << std::endl;
 		fragment_index = value_from_control_process;
+		std::cout << "received fragment_index " << fragment_index << std::endl;
 		if (fragment_index < old_fragment_index) {
 			std::cerr << "fragment_index < old_fragment_index" << std::endl;
 			std::cerr << fragment_index << " < " << old_fragment_index << std::endl;
@@ -357,24 +366,20 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 			exit(1);
 		}
 		
-		result = odls_seq.generateDLS(fragment_index);
+		result = odls_seq.generateDLS(fragment_index, rank);
 		
 		odls_seq.best_all_dls_psudotriple.unique_orthogonal_cells.clear();
 		odls_seq.best_one_dls_psudotriple.unique_orthogonal_cells.clear();
 		
-		if (result == 0) { // whole subspace of the search space was processed
-			std::cout << "fragment_index " << fragment_index << " processed all subspace" << std::endl;
-			break;
-		}
-		
-		std::cout << "deterministic_generate_dls() interrupted on rank " << rank << std::endl;
+		if ( rank == 0)
+			std::cout << "deterministic_generate_dls() finished on rank " << rank << std::endl;
 		
 		if (result == STOP_DUE_NO_DLS)
 			std::cout << "STOP_DUE_NO_DLS on rank " << rank << std::endl;
 		else if (result == STOP_DUE_LOW_LOCAL_BKV)
 			std::cout << "STOP_DUE_LOW_LOCAL_BKV on rank " << rank << std::endl;
-		else {
-			std::cerr << "incorrect result value " << result << std::endl;
+		else if (result == 0) {
+			std::cerr << "local_max == 0 on fragment_index " << fragment_index << std::endl;
 			exit(1);
 		}
 		

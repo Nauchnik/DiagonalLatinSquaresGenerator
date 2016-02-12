@@ -55,9 +55,9 @@ class odls_sequential
 private:
 	double dls_generate_start_time;
 	double dls_generate_last_time;
-	std::vector<odls_pair> odls_pair_vec;
 public:
 	odls_sequential();
+	std::vector<odls_pair> odls_pair_vec;
 	odls_pseudotriple best_one_dls_psudotriple;
 	odls_pseudotriple best_all_dls_psudotriple;
 	odls_pseudotriple dls_psudotriple;
@@ -69,7 +69,7 @@ public:
 	void makePseudotriple(odls_pair &orthogonal_pair, dls &new_dls, odls_pseudotriple &pseudotriple);
 	unsigned short processNewDLS(int fragment_index, unsigned short int *square);
 	int compareLocalRecordWithGlobal(int fragment_index, int local_max);
-	int generateDLS(int fragment_index);
+	int generateDLS(int fragment_index, int rank);
 };
 
 #endif

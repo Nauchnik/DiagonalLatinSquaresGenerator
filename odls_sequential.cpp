@@ -48,7 +48,7 @@ void odls_sequential::readOdlsPairs(std::string known_podls_file_name)
 	// if there is no separate string at the end of file, add last pair manually
 	if (cur_odls_pair.dls_1.size() != 0)
 		odls_pair_vec.push_back(cur_odls_pair); // add current odls pair
-
+	
 	/*for ( auto &x : odls_pair_vec ) {
 	for ( auto &y : x.dls_1 )
 	std::cout << y << std::endl;
@@ -57,10 +57,10 @@ void odls_sequential::readOdlsPairs(std::string known_podls_file_name)
 	std::cout << z << std::endl;
 	std::cout << std::endl << std::endl;
 	}*/
-
+	
 	std::set<std::string> greece_latin_square;
 	std::string cell_plus_cell;
-	// check every pair
+	// check corectness for every pair
 	for (auto &x : odls_pair_vec) {
 		for (unsigned j1 = 0; j1 < x.dls_1.size(); j1++)
 			for (unsigned j2 = 0; j2 < x.dls_1[j1].size(); j2++) {
@@ -215,16 +215,15 @@ int odls_sequential::compareLocalRecordWithGlobal(int fragment_index, int local_
 		return STOP_DUE_LOW_LOCAL_BKV;
 }
 
-int odls_sequential::generateDLS(int fragment_index)
+int odls_sequential::generateDLS(int fragment_index, int rank)
 {
 	unsigned short int square[100] = { 0 };
+	unsigned short int flag[100] = { 0 };
+	unsigned short int start[100] = { 0 };
+	unsigned short int end[100] = { 9 };
 	unsigned short int stl[10][10] = { 1 };
 	unsigned short int str[10][10] = { 1 };
 	unsigned short int diag[2][10] = { 1 };
-	unsigned short int flag[100] = { 0 };
-
-	unsigned short int start[100] = { 0 };
-	unsigned short int end[100] = { 9 };
 
 	unsigned long long int number_min = 0;
 	unsigned long long int number_max = 0;
@@ -238,8 +237,9 @@ int odls_sequential::generateDLS(int fragment_index)
 	int i = 0;
 	int j = 0;
 	//int number_of_comb=NUM_OF_PARTS;
-	int number_of_comb_in_one_part = 0;
-	float fparts = NUMBER_OF_COMB;
+	int number_of_comb_in_one_part = 1;
+
+	/*float fparts = NUMBER_OF_COMB;
 	fparts = NUMBER_OF_COMB / fparts;
 
 	//округление в +//
@@ -251,16 +251,16 @@ int odls_sequential::generateDLS(int fragment_index)
 		fparts = finter + 1;
 	else
 		fparts = finter;
-	number_of_comb_in_one_part = fparts;
-	int comparison_result = 0;
+	number_of_comb_in_one_part = fparts;*/
 
+	int comparison_result = 0;
+	
 	//обнуление квадратов и флагов перед генерацией областей ДЛК
 	for (i = 0; i<100; i++)
 	{
 		square[i] = 0;
 		flag[i] = 0;
 	}
-	count = 0;
 
 	for (i = 0; i<10; i++)
 	{
@@ -597,8 +597,13 @@ int odls_sequential::generateDLS(int fragment_index)
 	//Подсчет пороговых значний порогов
 	number_min = (start[11] * 1000000000) + (start[18] * 100000000) + (start[22] * 10000000) + (start[27] * 1000000) + (start[33] * 100000) + (start[36] * 10000) + (start[44] * 1000) + (start[45] * 100); // +(start[18]*10)+start[19];
 	number_max = (end[11] * 1000000000) + (end[18] * 100000000) + (end[22] * 10000000) + (end[27] * 1000000) + (end[33] * 100000) + (end[36] * 10000) + (end[44] * 1000) + (end[45] * 100); //+(end[18]*10)+end[19];
+			
+	if (rank == 1) {
+		printf("number_min %d \n", number_min);
+		printf("number_max %d \n", number_max);
+	}
 
-																																											//обнуление квадратов и флагов перед генерацией ДЛК
+	//обнуление квадратов и флагов перед генерацией ДЛК
 	for (i = 0; i<100; i++)
 	{
 		square[i] = 0;
@@ -699,6 +704,8 @@ int odls_sequential::generateDLS(int fragment_index)
 										}
 										for (square[9] = 9; (flag[8] && (square[9] == 9)); square[9]++) /*инициализцая 9 элемента*/
 										{
+											if (rank == 1)
+												printf("1 \n");
 											if (str[0][square[9]] && stl[9][square[9]] && diag[1][square[9]])
 											{
 												str[0][square[9]] = 0;
@@ -708,6 +715,8 @@ int odls_sequential::generateDLS(int fragment_index)
 											}
 											for (square[11] = 0; (flag[9] && (square[11] < 10)); square[11]++) /*инициализцая 10 элемента*/
 											{
+												if (rank == 1)
+													printf("2 \n");
 												if (diag[0][square[11]] && stl[1][square[11]] && str[1][square[11]])
 												{
 													str[1][square[11]] = 0;
@@ -717,6 +726,8 @@ int odls_sequential::generateDLS(int fragment_index)
 												}
 												for (square[18] = 0; (flag[11] && (square[18] < 10)); square[18]++) /*инициализцая 11 элемента*/
 												{
+													if (rank == 1)
+														printf("3 \n");
 													if (diag[1][square[18]] && stl[8][square[18]] && str[1][square[18]])
 													{
 														str[1][square[18]] = 0;
@@ -726,6 +737,8 @@ int odls_sequential::generateDLS(int fragment_index)
 													}
 													for (square[22] = 0; (flag[18] && (square[22] < 10)); square[22]++) /*инициализцая 12 элемента*/
 													{
+														if (rank == 1)
+															printf("4 \n");
 														if (diag[0][square[22]] && stl[2][square[22]] && str[2][square[22]])
 														{
 															str[2][square[22]] = 0;
@@ -771,6 +784,8 @@ int odls_sequential::generateDLS(int fragment_index)
 																		}
 																		for (square[45] = 0; (flag[44] && (square[45] < 10)); square[45]++) /*инициализцая 17 элемента*/
 																		{
+																			if (rank == 1)
+																				printf("4 \n");
 																			if (diag[1][square[45]] && stl[5][square[45]] && str[4][square[45]])
 																			{
 																				str[4][square[45]] = 0;
@@ -781,6 +796,12 @@ int odls_sequential::generateDLS(int fragment_index)
 																			}
 																			for (square[54] = 0; (flag[45] && (square[54] < 10) && (number_real >= number_min) && (number_real <= number_max)); square[54]++) /*инициализцая 18 элемента*/
 																			{
+																				if ( rank == 1 ) {
+																					printf("new \n");
+																					printf("number_min %d \n", number_min);
+																					printf("number_max %d \n", number_max);
+																					printf("number_real %d \n", number_real);
+																				}
 																				if (diag[1][square[54]] && stl[4][square[54]] && str[5][square[54]])
 																				{
 																					str[5][square[54]] = 0;
@@ -1450,9 +1471,12 @@ int odls_sequential::generateDLS(int fragment_index)
 																																																																																																					{
 																																																																																																						/* ДЛК сгенерирован*/
 																																																																																																						count++;
-
+																																																																																																						std::cout << "count " << count << std::endl;
+																																																																																																						
 																																																																																																						// тут расположить код проверки коэфициента ортогональности
 																																																																																																						cur_pseudotriple_characteristics = processNewDLS(fragment_index, square);
+
+																																																																																																						std::cout << "cur_pseudotriple_characteristics " << cur_pseudotriple_characteristics << std::endl;
 
 																																																																																																						if( cur_pseudotriple_characteristics > local_max )
 																																																																																																							local_max=cur_pseudotriple_characteristics;
@@ -2185,5 +2209,6 @@ int odls_sequential::generateDLS(int fragment_index)
 			}
 		}
 	}
-	return 0;
+
+	return local_max;
 }
