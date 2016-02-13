@@ -133,7 +133,6 @@ void odls_sequential::processNewDLS(int fragment_index, unsigned short int *squa
 	//	first_dls_generate_time = MPI_Wtime() - dls_generate_start_time;
 	
 	k = 0;
-	cur_string_set = "";
 
 	//double prev_time = MPI_Wtime();
 
@@ -141,7 +140,6 @@ void odls_sequential::processNewDLS(int fragment_index, unsigned short int *squa
 		for (int j2 = 0; j2 < LS_ORDER; j2++)
 			sstream << square[j1*LS_ORDER + j2];
 		new_dls[j1] = sstream.str();
-		cur_string_set += sstream.str();
 		sstream.clear(); sstream.str("");
 	}
 
