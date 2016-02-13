@@ -109,7 +109,7 @@ void odls_sequential::makePseudotriple(odls_pair &orthogonal_pair, dls &new_dls,
 		std::inserter(pseudotriple.unique_orthogonal_cells, pseudotriple.unique_orthogonal_cells.begin()));
 }
 
-unsigned short odls_sequential::processNewDLS(int fragment_index, unsigned short int *square)
+void odls_sequential::processNewDLS(int fragment_index, unsigned short int *square)
 {
 	std::string cur_string_set;
 	unsigned k;
@@ -117,9 +117,6 @@ unsigned short odls_sequential::processNewDLS(int fragment_index, unsigned short
 	unsigned best_first_pair_orthogonal_cells = 0, best_second_pair_orthogonal_cells = 0;
 	dls new_dls;
 	new_dls.resize(LS_ORDER);
-	char psuedotriple_char_arr[psuedotriple_char_arr_len];
-	unsigned char_index;
-	unsigned ortogonal_cells;
 
 	//dls_total_time += MPI_Wtime() - dls_generate_last_time;
 
@@ -161,14 +158,40 @@ unsigned short odls_sequential::processNewDLS(int fragment_index, unsigned short
 
 	if (best_one_dls_psudotriple.unique_orthogonal_cells.size() > best_all_dls_psudotriple.unique_orthogonal_cells.size()) {
 		best_all_dls_psudotriple = best_one_dls_psudotriple;
-		std::cout << "***" << std::endl;
+		/*std::cout << "***" << std::endl;
 		std::cout << "best_all_dls_psudotriple_orthogonal_cells " << best_all_dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
 
 		std::cout << "time from start " << MPI_Wtime() - dls_generate_start_time << std::endl;
 
 		std::cout << "genereated_DLS_count " << generated_DLS_count << std::endl;
 		std::cout << "dls_total_time " << dls_total_time << std::endl;
-		std::cout << "pseudotriples_total_time " << pseudotriples_total_time << std::endl;
+		std::cout << "pseudotriples_total_time " << pseudotriples_total_time << std::endl;*/
+	}
+	
+	//pseudotriples_total_time += MPI_Wtime() - prev_time;
+}
+
+int odls_sequential::compareLocalRecordWithGlobal(int fragment_index)
+{
+	// send local BKV, recieve global BKV and compare them
+	int global_max;
+	int local_max = best_all_dls_psudotriple.unique_orthogonal_cells.size();
+	unsigned char_index;
+	char psuedotriple_char_arr[psuedotriple_char_arr_len];
+	unsigned ortogonal_cells;
+	MPI_Status status;
+	int tmp = EXCHANGE_LOCAL_GLOBAL_BKV;
+
+	// ask for current global BKV
+	MPI_Send(&tmp, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+	MPI_Send(&local_max, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+	MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+	// receive current global BKV
+	MPI_Recv(&global_max, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+	
+	if( local_max > global_max )	
+	{
+		// send all all record pseudotriple 
 		char_index = 0;
 		for (auto &x : best_all_dls_psudotriple.dls_1)
 			for (auto &y : x)
@@ -181,86 +204,52 @@ unsigned short odls_sequential::processNewDLS(int fragment_index, unsigned short
 				psuedotriple_char_arr[char_index++] = y;
 		ortogonal_cells = best_all_dls_psudotriple.unique_orthogonal_cells.size();
 
-		MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-		MPI_Send(&ortogonal_cells, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD);
+		//MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+		//MPI_Send(&ortogonal_cells, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&first_dls_generate_time, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&generated_DLS_count, 1, MPI_UNSIGNED_LONG_LONG, 0, 0, MPI_COMM_WORLD);
 	}
-	
-	//pseudotriples_total_time += MPI_Wtime() - prev_time;
-
-	return best_one_dls_psudotriple.unique_orthogonal_cells.size();
-}
-
-int odls_sequential::compareLocalRecordWithGlobal(int fragment_index, int local_max)
-{
-	//получить глобальный рекорд
-	int global_max;
-	MPI_Status status;
-	
-	// ask for current global BKV
-	int tmp = -1;
-	MPI_Send(&tmp,       1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-	MPI_Send(&local_max, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-	// receive current global BKV
-	MPI_Recv(&global_max, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
-	
-	if( local_max > global_max )	
-	{
-		MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-		MPI_Send(&local_max, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-	}
 	else if ( local_max < global_max - MAX_DIFF_VALUE_FROM_BKV)
 		return STOP_DUE_LOW_LOCAL_BKV;
+
+	return 0;
 }
 
-int odls_sequential::generateDLS(int fragment_index, int rank)
+int odls_sequential::generateDLS(int parts, int part, int rank)
 {
 	unsigned short int square[100] = { 0 };
-	unsigned short int flag[100] = { 0 };
-	unsigned short int start[100] = { 0 };
-	unsigned short int end[100] = { 9 };
 	unsigned short int stl[10][10] = { 1 };
 	unsigned short int str[10][10] = { 1 };
 	unsigned short int diag[2][10] = { 1 };
+	unsigned short int flag[100] = { 0 };
+
+	unsigned short int start[100] = { 0 };
+	unsigned short int end[100] = { 9 };
 
 	unsigned long long int number_min = 0;
 	unsigned long long int number_max = 0;
 	unsigned long long int number_real = 0;
 
-	unsigned short int cur_pseudotriple_characteristics = 0;
+	unsigned short int result = 0;
 	unsigned short int local_max = 0;
 	unsigned short int global_max = 0;
 
 	unsigned long long int count = 0;
 	int i = 0;
 	int j = 0;
-	//int number_of_comb=NUM_OF_PARTS;
+
 	int number_of_comb_in_one_part = 1;
+	unsigned short int cur_pseudotriple_characteristics = 0;
+	int comparison_result;
 
-	/*float fparts = NUMBER_OF_COMB;
-	fparts = NUMBER_OF_COMB / fparts;
-
-	//округление в +//
-	int inter;
-	float finter;
-	inter = fparts;
-	finter = inter;
-	if (fparts != finter)
-		fparts = finter + 1;
-	else
-		fparts = finter;
-	number_of_comb_in_one_part = fparts;*/
-
-	int comparison_result = 0;
-	
 	//обнуление квадратов и флагов перед генерацией областей ДЛК
 	for (i = 0; i<100; i++)
 	{
 		square[i] = 0;
 		flag[i] = 0;
 	}
+	count = 0;
 
 	for (i = 0; i<10; i++)
 	{
@@ -438,7 +427,7 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 																			if (flag[45])
 																			{
 
-																				if (count == (number_of_comb_in_one_part*fragment_index))
+																				if (count == (number_of_comb_in_one_part*part))
 																				{
 																					for (j = 0; j<100; j++)
 																					{
@@ -446,7 +435,7 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 																					}
 																				}
 
-																				if ((count >= number_of_comb_in_one_part*fragment_index) && (count <= (number_of_comb_in_one_part*(fragment_index + 1) - 1)))
+																				if ((count >= number_of_comb_in_one_part*part) && (count <= (number_of_comb_in_one_part*(part + 1) - 1)))
 																				{
 																					for (j = 0; j<100; j++)
 																					{
@@ -597,13 +586,9 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 	//Подсчет пороговых значний порогов
 	number_min = (start[11] * 1000000000) + (start[18] * 100000000) + (start[22] * 10000000) + (start[27] * 1000000) + (start[33] * 100000) + (start[36] * 10000) + (start[44] * 1000) + (start[45] * 100); // +(start[18]*10)+start[19];
 	number_max = (end[11] * 1000000000) + (end[18] * 100000000) + (end[22] * 10000000) + (end[27] * 1000000) + (end[33] * 100000) + (end[36] * 10000) + (end[44] * 1000) + (end[45] * 100); //+(end[18]*10)+end[19];
-			
-	if (rank == 1) {
-		printf("number_min %d \n", number_min);
-		printf("number_max %d \n", number_max);
-	}
 
-	//обнуление квадратов и флагов перед генерацией ДЛК
+
+																																															//обнуление квадратов и флагов перед генерацией ДЛК
 	for (i = 0; i<100; i++)
 	{
 		square[i] = 0;
@@ -627,7 +612,8 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 			diag[i][j] = 1;
 		}
 	}
-	
+
+
 	//генерация ДЛК
 	for (square[0] = 0; square[0] == 0; square[0]++) /*инициализцая 0 элемента*/
 	{
@@ -704,8 +690,6 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 										}
 										for (square[9] = 9; (flag[8] && (square[9] == 9)); square[9]++) /*инициализцая 9 элемента*/
 										{
-											if (rank == 1)
-												printf("1 \n");
 											if (str[0][square[9]] && stl[9][square[9]] && diag[1][square[9]])
 											{
 												str[0][square[9]] = 0;
@@ -715,8 +699,6 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 											}
 											for (square[11] = 0; (flag[9] && (square[11] < 10)); square[11]++) /*инициализцая 10 элемента*/
 											{
-												if (rank == 1)
-													printf("2 \n");
 												if (diag[0][square[11]] && stl[1][square[11]] && str[1][square[11]])
 												{
 													str[1][square[11]] = 0;
@@ -726,8 +708,6 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 												}
 												for (square[18] = 0; (flag[11] && (square[18] < 10)); square[18]++) /*инициализцая 11 элемента*/
 												{
-													if (rank == 1)
-														printf("3 \n");
 													if (diag[1][square[18]] && stl[8][square[18]] && str[1][square[18]])
 													{
 														str[1][square[18]] = 0;
@@ -737,8 +717,6 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 													}
 													for (square[22] = 0; (flag[18] && (square[22] < 10)); square[22]++) /*инициализцая 12 элемента*/
 													{
-														if (rank == 1)
-															printf("4 \n");
 														if (diag[0][square[22]] && stl[2][square[22]] && str[2][square[22]])
 														{
 															str[2][square[22]] = 0;
@@ -784,8 +762,6 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 																		}
 																		for (square[45] = 0; (flag[44] && (square[45] < 10)); square[45]++) /*инициализцая 17 элемента*/
 																		{
-																			if (rank == 1)
-																				printf("4 \n");
 																			if (diag[1][square[45]] && stl[5][square[45]] && str[4][square[45]])
 																			{
 																				str[4][square[45]] = 0;
@@ -796,12 +772,6 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 																			}
 																			for (square[54] = 0; (flag[45] && (square[54] < 10) && (number_real >= number_min) && (number_real <= number_max)); square[54]++) /*инициализцая 18 элемента*/
 																			{
-																				if ( rank == 1 ) {
-																					printf("new \n");
-																					printf("number_min %d \n", number_min);
-																					printf("number_max %d \n", number_max);
-																					printf("number_real %d \n", number_real);
-																				}
 																				if (diag[1][square[54]] && stl[4][square[54]] && str[5][square[54]])
 																				{
 																					str[5][square[54]] = 0;
@@ -1471,744 +1441,742 @@ int odls_sequential::generateDLS(int fragment_index, int rank)
 																																																																																																					{
 																																																																																																						/* ДЛК сгенерирован*/
 																																																																																																						count++;
-																																																																																																						std::cout << "count " << count << std::endl;
-																																																																																																						
+																																																																																																					
 																																																																																																						// тут расположить код проверки коэфициента ортогональности
-																																																																																																						cur_pseudotriple_characteristics = processNewDLS(fragment_index, square);
-
-																																																																																																						std::cout << "cur_pseudotriple_characteristics " << cur_pseudotriple_characteristics << std::endl;
-
-																																																																																																						if( cur_pseudotriple_characteristics > local_max )
-																																																																																																							local_max=cur_pseudotriple_characteristics;
-
+																																																																																																						processNewDLS(part, square);
+																																																																																																																																																																																																																																																																																																																
 																																																																																																						if (count % NUM_OF_DLS_IN_ONE_CHECK == 0) {
-																																																																																																							comparison_result = compareLocalRecordWithGlobal(fragment_index, local_max);
+																																																																																																							comparison_result = compareLocalRecordWithGlobal(part);
+																																																																																																							/*if (rank == 1) {
+																																																																																																								std::cout << "rank " << rank << " count " << count << std::endl;
+																																																																																																								std::cout << "comparison_result " << comparison_result << std::endl;
+																																																																																																							}*/
 																																																																																																							if (comparison_result == STOP_DUE_LOW_LOCAL_BKV)
 																																																																																																								return STOP_DUE_LOW_LOCAL_BKV;
 																																																																																																						}
-
-																																																																																																						if (flag[98])
-																																																																																																						{
-																																																																																																							str[9][square[98]] = 1;
-																																																																																																							stl[8][square[98]] = 1;
-																																																																																																							flag[98] = 0;
-																																																																																																						}
 																																																																																																					}
-
-																																																																																																					if (flag[97])
+																																																																																																					
+																																																																																																					if (flag[98])
 																																																																																																					{
-																																																																																																						str[9][square[97]] = 1;
-																																																																																																						stl[7][square[97]] = 1;
-																																																																																																						flag[97] = 0;
+																																																																																																						str[9][square[98]] = 1;
+																																																																																																						stl[8][square[98]] = 1;
+																																																																																																						flag[98] = 0;
 																																																																																																					}
 																																																																																																				}
-																																																																																																				if (flag[96])
+
+																																																																																																				if (flag[97])
 																																																																																																				{
-																																																																																																					str[9][square[96]] = 1;
-																																																																																																					stl[6][square[96]] = 1;
-																																																																																																					flag[96] = 0;
+																																																																																																					str[9][square[97]] = 1;
+																																																																																																					stl[7][square[97]] = 1;
+																																																																																																					flag[97] = 0;
 																																																																																																				}
 																																																																																																			}
-																																																																																																			if (flag[95])
+																																																																																																			if (flag[96])
 																																																																																																			{
-																																																																																																				str[9][square[95]] = 1;
-																																																																																																				stl[5][square[95]] = 1;
-																																																																																																				flag[95] = 0;
+																																																																																																				str[9][square[96]] = 1;
+																																																																																																				stl[6][square[96]] = 1;
+																																																																																																				flag[96] = 0;
 																																																																																																			}
 																																																																																																		}
-																																																																																																		if (flag[94])
+																																																																																																		if (flag[95])
 																																																																																																		{
-																																																																																																			str[9][square[94]] = 1;
-																																																																																																			stl[4][square[94]] = 1;
-																																																																																																			flag[94] = 0;
+																																																																																																			str[9][square[95]] = 1;
+																																																																																																			stl[5][square[95]] = 1;
+																																																																																																			flag[95] = 0;
 																																																																																																		}
 																																																																																																	}
-																																																																																																	if (flag[93])
+																																																																																																	if (flag[94])
 																																																																																																	{
-																																																																																																		str[9][square[93]] = 1;
-																																																																																																		stl[3][square[93]] = 1;
-																																																																																																		flag[93] = 0;
+																																																																																																		str[9][square[94]] = 1;
+																																																																																																		stl[4][square[94]] = 1;
+																																																																																																		flag[94] = 0;
 																																																																																																	}
 																																																																																																}
-																																																																																																if (flag[92])
+																																																																																																if (flag[93])
 																																																																																																{
-																																																																																																	str[9][square[92]] = 1;
-																																																																																																	stl[2][square[92]] = 1;
-																																																																																																	flag[92] = 0;
+																																																																																																	str[9][square[93]] = 1;
+																																																																																																	stl[3][square[93]] = 1;
+																																																																																																	flag[93] = 0;
 																																																																																																}
 																																																																																															}
-																																																																																															if (flag[91])
+																																																																																															if (flag[92])
 																																																																																															{
-																																																																																																str[9][square[91]] = 1;
-																																																																																																stl[1][square[91]] = 1;
-																																																																																																flag[91] = 0;
+																																																																																																str[9][square[92]] = 1;
+																																																																																																stl[2][square[92]] = 1;
+																																																																																																flag[92] = 0;
 																																																																																															}
 																																																																																														}
-																																																																																														if (flag[89])
+																																																																																														if (flag[91])
 																																																																																														{
-																																																																																															str[8][square[89]] = 1;
-																																																																																															stl[9][square[89]] = 1;
-																																																																																															flag[89] = 0;
+																																																																																															str[9][square[91]] = 1;
+																																																																																															stl[1][square[91]] = 1;
+																																																																																															flag[91] = 0;
 																																																																																														}
 																																																																																													}
-																																																																																													if (flag[87])
+																																																																																													if (flag[89])
 																																																																																													{
-																																																																																														str[8][square[87]] = 1;
-																																																																																														stl[7][square[87]] = 1;
-																																																																																														flag[87] = 0;
+																																																																																														str[8][square[89]] = 1;
+																																																																																														stl[9][square[89]] = 1;
+																																																																																														flag[89] = 0;
 																																																																																													}
 																																																																																												}
-																																																																																												if (flag[86])
+																																																																																												if (flag[87])
 																																																																																												{
-																																																																																													str[8][square[86]] = 1;
-																																																																																													stl[6][square[86]] = 1;
-																																																																																													flag[86] = 0;
+																																																																																													str[8][square[87]] = 1;
+																																																																																													stl[7][square[87]] = 1;
+																																																																																													flag[87] = 0;
 																																																																																												}
 																																																																																											}
-																																																																																											if (flag[85])
+																																																																																											if (flag[86])
 																																																																																											{
-																																																																																												str[8][square[85]] = 1;
-																																																																																												stl[5][square[85]] = 1;
-																																																																																												flag[85] = 0;
+																																																																																												str[8][square[86]] = 1;
+																																																																																												stl[6][square[86]] = 1;
+																																																																																												flag[86] = 0;
 																																																																																											}
 																																																																																										}
-																																																																																										if (flag[84])
+																																																																																										if (flag[85])
 																																																																																										{
-																																																																																											str[8][square[84]] = 1;
-																																																																																											stl[4][square[84]] = 1;
-																																																																																											flag[84] = 0;
+																																																																																											str[8][square[85]] = 1;
+																																																																																											stl[5][square[85]] = 1;
+																																																																																											flag[85] = 0;
 																																																																																										}
 																																																																																									}
-																																																																																									if (flag[83])
+																																																																																									if (flag[84])
 																																																																																									{
-																																																																																										str[8][square[83]] = 1;
-																																																																																										stl[3][square[83]] = 1;
-																																																																																										flag[83] = 0;
+																																																																																										str[8][square[84]] = 1;
+																																																																																										stl[4][square[84]] = 1;
+																																																																																										flag[84] = 0;
 																																																																																									}
 																																																																																								}
-																																																																																								if (flag[82])
+																																																																																								if (flag[83])
 																																																																																								{
-																																																																																									str[8][square[82]] = 1;
-																																																																																									stl[2][square[82]] = 1;
-																																																																																									flag[82] = 0;
+																																																																																									str[8][square[83]] = 1;
+																																																																																									stl[3][square[83]] = 1;
+																																																																																									flag[83] = 0;
 																																																																																								}
 																																																																																							}
-																																																																																							if (flag[80])
+																																																																																							if (flag[82])
 																																																																																							{
-																																																																																								str[8][square[80]] = 1;
-																																																																																								stl[0][square[80]] = 1;
-																																																																																								flag[80] = 0;
+																																																																																								str[8][square[82]] = 1;
+																																																																																								stl[2][square[82]] = 1;
+																																																																																								flag[82] = 0;
 																																																																																							}
 																																																																																						}
-																																																																																						if (flag[79])
+																																																																																						if (flag[80])
 																																																																																						{
-																																																																																							str[7][square[79]] = 1;
-																																																																																							stl[9][square[79]] = 1;
-																																																																																							flag[79] = 0;
+																																																																																							str[8][square[80]] = 1;
+																																																																																							stl[0][square[80]] = 1;
+																																																																																							flag[80] = 0;
 																																																																																						}
 																																																																																					}
-																																																																																					if (flag[78])
+																																																																																					if (flag[79])
 																																																																																					{
-																																																																																						str[7][square[78]] = 1;
-																																																																																						stl[8][square[78]] = 1;
-																																																																																						flag[78] = 0;
+																																																																																						str[7][square[79]] = 1;
+																																																																																						stl[9][square[79]] = 1;
+																																																																																						flag[79] = 0;
 																																																																																					}
 																																																																																				}
-																																																																																				if (flag[76])
+																																																																																				if (flag[78])
 																																																																																				{
-																																																																																					str[7][square[76]] = 1;
-																																																																																					stl[6][square[76]] = 1;
-																																																																																					flag[76] = 0;
+																																																																																					str[7][square[78]] = 1;
+																																																																																					stl[8][square[78]] = 1;
+																																																																																					flag[78] = 0;
 																																																																																				}
 																																																																																			}
-																																																																																			if (flag[75])
+																																																																																			if (flag[76])
 																																																																																			{
-																																																																																				str[7][square[75]] = 1;
-																																																																																				stl[5][square[75]] = 1;
-																																																																																				flag[75] = 0;
+																																																																																				str[7][square[76]] = 1;
+																																																																																				stl[6][square[76]] = 1;
+																																																																																				flag[76] = 0;
 																																																																																			}
 																																																																																		}
-																																																																																		if (flag[74])
+																																																																																		if (flag[75])
 																																																																																		{
-																																																																																			str[7][square[74]] = 1;
-																																																																																			stl[4][square[74]] = 1;
-																																																																																			flag[74] = 0;
+																																																																																			str[7][square[75]] = 1;
+																																																																																			stl[5][square[75]] = 1;
+																																																																																			flag[75] = 0;
 																																																																																		}
 																																																																																	}
-																																																																																	if (flag[73])
+																																																																																	if (flag[74])
 																																																																																	{
-																																																																																		str[7][square[73]] = 1;
-																																																																																		stl[3][square[73]] = 1;
-																																																																																		flag[73] = 0;
+																																																																																		str[7][square[74]] = 1;
+																																																																																		stl[4][square[74]] = 1;
+																																																																																		flag[74] = 0;
 																																																																																	}
 																																																																																}
-																																																																																if (flag[71])
+																																																																																if (flag[73])
 																																																																																{
-																																																																																	str[7][square[71]] = 1;
-																																																																																	stl[1][square[71]] = 1;
-																																																																																	flag[71] = 0;
+																																																																																	str[7][square[73]] = 1;
+																																																																																	stl[3][square[73]] = 1;
+																																																																																	flag[73] = 0;
 																																																																																}
 																																																																															}
-																																																																															if (flag[70])
+																																																																															if (flag[71])
 																																																																															{
-																																																																																str[7][square[70]] = 1;
-																																																																																stl[0][square[70]] = 1;
-																																																																																flag[70] = 0;
+																																																																																str[7][square[71]] = 1;
+																																																																																stl[1][square[71]] = 1;
+																																																																																flag[71] = 0;
 																																																																															}
 																																																																														}
-																																																																														if (flag[69])
+																																																																														if (flag[70])
 																																																																														{
-																																																																															str[6][square[69]] = 1;
-																																																																															stl[9][square[69]] = 1;
-																																																																															flag[69] = 0;
+																																																																															str[7][square[70]] = 1;
+																																																																															stl[0][square[70]] = 1;
+																																																																															flag[70] = 0;
 																																																																														}
 																																																																													}
-																																																																													if (flag[68])
+																																																																													if (flag[69])
 																																																																													{
-																																																																														str[6][square[68]] = 1;
-																																																																														stl[8][square[68]] = 1;
-																																																																														flag[68] = 0;
+																																																																														str[6][square[69]] = 1;
+																																																																														stl[9][square[69]] = 1;
+																																																																														flag[69] = 0;
 																																																																													}
 																																																																												}
-																																																																												if (flag[67])
+																																																																												if (flag[68])
 																																																																												{
-																																																																													str[6][square[67]] = 1;
-																																																																													stl[7][square[67]] = 1;
-																																																																													flag[67] = 0;
+																																																																													str[6][square[68]] = 1;
+																																																																													stl[8][square[68]] = 1;
+																																																																													flag[68] = 0;
 																																																																												}
 																																																																											}
-																																																																											if (flag[65])
+																																																																											if (flag[67])
 																																																																											{
-																																																																												str[6][square[65]] = 1;
-																																																																												stl[5][square[65]] = 1;
-																																																																												flag[65] = 0;
+																																																																												str[6][square[67]] = 1;
+																																																																												stl[7][square[67]] = 1;
+																																																																												flag[67] = 0;
 																																																																											}
 																																																																										}
-																																																																										if (flag[64])
+																																																																										if (flag[65])
 																																																																										{
-																																																																											str[6][square[64]] = 1;
-																																																																											stl[4][square[64]] = 1;
-																																																																											flag[64] = 0;
+																																																																											str[6][square[65]] = 1;
+																																																																											stl[5][square[65]] = 1;
+																																																																											flag[65] = 0;
 																																																																										}
 																																																																									}
-																																																																									if (flag[62])
+																																																																									if (flag[64])
 																																																																									{
-																																																																										str[6][square[62]] = 1;
-																																																																										stl[2][square[62]] = 1;
-																																																																										flag[62] = 0;
+																																																																										str[6][square[64]] = 1;
+																																																																										stl[4][square[64]] = 1;
+																																																																										flag[64] = 0;
 																																																																									}
 																																																																								}
-																																																																								if (flag[61])
+																																																																								if (flag[62])
 																																																																								{
-																																																																									str[6][square[61]] = 1;
-																																																																									stl[1][square[61]] = 1;
-																																																																									flag[61] = 0;
+																																																																									str[6][square[62]] = 1;
+																																																																									stl[2][square[62]] = 1;
+																																																																									flag[62] = 0;
 																																																																								}
 																																																																							}
-																																																																							if (flag[60])
+																																																																							if (flag[61])
 																																																																							{
-																																																																								str[6][square[60]] = 1;
-																																																																								stl[0][square[60]] = 1;
-																																																																								flag[60] = 0;
+																																																																								str[6][square[61]] = 1;
+																																																																								stl[1][square[61]] = 1;
+																																																																								flag[61] = 0;
 																																																																							}
 																																																																						}
-																																																																						if (flag[59])
+																																																																						if (flag[60])
 																																																																						{
-																																																																							str[5][square[59]] = 1;
-																																																																							stl[9][square[59]] = 1;
-																																																																							flag[59] = 0;
+																																																																							str[6][square[60]] = 1;
+																																																																							stl[0][square[60]] = 1;
+																																																																							flag[60] = 0;
 																																																																						}
 																																																																					}
-																																																																					if (flag[58])
+																																																																					if (flag[59])
 																																																																					{
-																																																																						str[5][square[58]] = 1;
-																																																																						stl[8][square[58]] = 1;
-																																																																						flag[58] = 0;
+																																																																						str[5][square[59]] = 1;
+																																																																						stl[9][square[59]] = 1;
+																																																																						flag[59] = 0;
 																																																																					}
 																																																																				}
-																																																																				if (flag[57])
+																																																																				if (flag[58])
 																																																																				{
-																																																																					str[5][square[57]] = 1;
-																																																																					stl[7][square[57]] = 1;
-																																																																					flag[57] = 0;
+																																																																					str[5][square[58]] = 1;
+																																																																					stl[8][square[58]] = 1;
+																																																																					flag[58] = 0;
 																																																																				}
 																																																																			}
-																																																																			if (flag[56])
+																																																																			if (flag[57])
 																																																																			{
-																																																																				str[5][square[56]] = 1;
-																																																																				stl[6][square[56]] = 1;
-																																																																				flag[56] = 0;
+																																																																				str[5][square[57]] = 1;
+																																																																				stl[7][square[57]] = 1;
+																																																																				flag[57] = 0;
 																																																																			}
 																																																																		}
-																																																																		if (flag[53])
+																																																																		if (flag[56])
 																																																																		{
-																																																																			str[5][square[53]] = 1;
-																																																																			stl[3][square[53]] = 1;
-																																																																			flag[53] = 0;
+																																																																			str[5][square[56]] = 1;
+																																																																			stl[6][square[56]] = 1;
+																																																																			flag[56] = 0;
 																																																																		}
 																																																																	}
-																																																																	if (flag[52])
+																																																																	if (flag[53])
 																																																																	{
-																																																																		str[5][square[52]] = 1;
-																																																																		stl[2][square[52]] = 1;
-																																																																		flag[52] = 0;
+																																																																		str[5][square[53]] = 1;
+																																																																		stl[3][square[53]] = 1;
+																																																																		flag[53] = 0;
 																																																																	}
 																																																																}
-																																																																if (flag[51])
+																																																																if (flag[52])
 																																																																{
-																																																																	str[5][square[51]] = 1;
-																																																																	stl[1][square[51]] = 1;
-																																																																	flag[51] = 0;
+																																																																	str[5][square[52]] = 1;
+																																																																	stl[2][square[52]] = 1;
+																																																																	flag[52] = 0;
 																																																																}
 																																																															}
-																																																															if (flag[50])
+																																																															if (flag[51])
 																																																															{
-																																																																str[5][square[50]] = 1;
-																																																																stl[0][square[50]] = 1;
-																																																																flag[50] = 0;
+																																																																str[5][square[51]] = 1;
+																																																																stl[1][square[51]] = 1;
+																																																																flag[51] = 0;
 																																																															}
 																																																														}
-																																																														if (flag[49])
+																																																														if (flag[50])
 																																																														{
-																																																															str[4][square[49]] = 1;
-																																																															stl[9][square[49]] = 1;
-																																																															flag[49] = 0;
+																																																															str[5][square[50]] = 1;
+																																																															stl[0][square[50]] = 1;
+																																																															flag[50] = 0;
 																																																														}
 																																																													}
-																																																													if (flag[48])
+																																																													if (flag[49])
 																																																													{
-																																																														str[4][square[48]] = 1;
-																																																														stl[8][square[48]] = 1;
-																																																														flag[48] = 0;
+																																																														str[4][square[49]] = 1;
+																																																														stl[9][square[49]] = 1;
+																																																														flag[49] = 0;
 																																																													}
 																																																												}
-																																																												if (flag[47])
+																																																												if (flag[48])
 																																																												{
-																																																													str[4][square[47]] = 1;
-																																																													stl[7][square[47]] = 1;
-																																																													flag[47] = 0;
+																																																													str[4][square[48]] = 1;
+																																																													stl[8][square[48]] = 1;
+																																																													flag[48] = 0;
 																																																												}
 																																																											}
-																																																											if (flag[46])
+																																																											if (flag[47])
 																																																											{
-																																																												str[4][square[46]] = 1;
-																																																												stl[6][square[46]] = 1;
-																																																												flag[46] = 0;
+																																																												str[4][square[47]] = 1;
+																																																												stl[7][square[47]] = 1;
+																																																												flag[47] = 0;
 																																																											}
 																																																										}
-																																																										if (flag[43])
+																																																										if (flag[46])
 																																																										{
-																																																											str[4][square[43]] = 1;
-																																																											stl[3][square[43]] = 1;
-																																																											flag[43] = 0;
+																																																											str[4][square[46]] = 1;
+																																																											stl[6][square[46]] = 1;
+																																																											flag[46] = 0;
 																																																										}
 																																																									}
-																																																									if (flag[42])
+																																																									if (flag[43])
 																																																									{
-																																																										str[4][square[42]] = 1;
-																																																										stl[2][square[42]] = 1;
-																																																										flag[42] = 0;
+																																																										str[4][square[43]] = 1;
+																																																										stl[3][square[43]] = 1;
+																																																										flag[43] = 0;
 																																																									}
 																																																								}
-																																																								if (flag[41])
+																																																								if (flag[42])
 																																																								{
-																																																									str[4][square[41]] = 1;
-																																																									stl[1][square[41]] = 1;
-																																																									flag[41] = 0;
+																																																									str[4][square[42]] = 1;
+																																																									stl[2][square[42]] = 1;
+																																																									flag[42] = 0;
 																																																								}
 																																																							}
-																																																							if (flag[40])
+																																																							if (flag[41])
 																																																							{
-																																																								str[4][square[40]] = 1;
-																																																								stl[0][square[40]] = 1;
-																																																								flag[40] = 0;
+																																																								str[4][square[41]] = 1;
+																																																								stl[1][square[41]] = 1;
+																																																								flag[41] = 0;
 																																																							}
 																																																						}
-																																																						if (flag[39])
+																																																						if (flag[40])
 																																																						{
-																																																							str[3][square[39]] = 1;
-																																																							stl[9][square[39]] = 1;
-																																																							flag[39] = 0;
+																																																							str[4][square[40]] = 1;
+																																																							stl[0][square[40]] = 1;
+																																																							flag[40] = 0;
 																																																						}
 																																																					}
-																																																					if (flag[38])
+																																																					if (flag[39])
 																																																					{
-																																																						str[3][square[38]] = 1;
-																																																						stl[8][square[38]] = 1;
-																																																						flag[38] = 0;
+																																																						str[3][square[39]] = 1;
+																																																						stl[9][square[39]] = 1;
+																																																						flag[39] = 0;
 																																																					}
 																																																				}
-																																																				if (flag[37])
+																																																				if (flag[38])
 																																																				{
-																																																					str[3][square[37]] = 1;
-																																																					stl[7][square[37]] = 1;
-																																																					flag[37] = 0;
+																																																					str[3][square[38]] = 1;
+																																																					stl[8][square[38]] = 1;
+																																																					flag[38] = 0;
 																																																				}
 																																																			}
-																																																			if (flag[35])
+																																																			if (flag[37])
 																																																			{
-																																																				str[3][square[35]] = 1;
-																																																				stl[5][square[35]] = 1;
-																																																				flag[35] = 0;
+																																																				str[3][square[37]] = 1;
+																																																				stl[7][square[37]] = 1;
+																																																				flag[37] = 0;
 																																																			}
 																																																		}
-																																																		if (flag[34])
+																																																		if (flag[35])
 																																																		{
-																																																			str[3][square[34]] = 1;
-																																																			stl[4][square[34]] = 1;
-																																																			flag[34] = 0;
+																																																			str[3][square[35]] = 1;
+																																																			stl[5][square[35]] = 1;
+																																																			flag[35] = 0;
 																																																		}
 																																																	}
-																																																	if (flag[32])
+																																																	if (flag[34])
 																																																	{
-																																																		str[3][square[32]] = 1;
-																																																		stl[2][square[32]] = 1;
-																																																		flag[32] = 0;
+																																																		str[3][square[34]] = 1;
+																																																		stl[4][square[34]] = 1;
+																																																		flag[34] = 0;
 																																																	}
 																																																}
-																																																if (flag[31])
+																																																if (flag[32])
 																																																{
-																																																	str[3][square[31]] = 1;
-																																																	stl[1][square[31]] = 1;
-																																																	flag[31] = 0;
+																																																	str[3][square[32]] = 1;
+																																																	stl[2][square[32]] = 1;
+																																																	flag[32] = 0;
 																																																}
 																																															}
-																																															if (flag[30])
+																																															if (flag[31])
 																																															{
-																																																str[3][square[30]] = 1;
-																																																stl[0][square[30]] = 1;
-																																																flag[30] = 0;
+																																																str[3][square[31]] = 1;
+																																																stl[1][square[31]] = 1;
+																																																flag[31] = 0;
 																																															}
 																																														}
-																																														if (flag[29])
+																																														if (flag[30])
 																																														{
-																																															str[2][square[29]] = 1;
-																																															stl[9][square[29]] = 1;
-																																															flag[29] = 0;
+																																															str[3][square[30]] = 1;
+																																															stl[0][square[30]] = 1;
+																																															flag[30] = 0;
 																																														}
 																																													}
-																																													if (flag[28])
+																																													if (flag[29])
 																																													{
-																																														str[2][square[28]] = 1;
-																																														stl[8][square[28]] = 1;
-																																														flag[28] = 0;
+																																														str[2][square[29]] = 1;
+																																														stl[9][square[29]] = 1;
+																																														flag[29] = 0;
 																																													}
 																																												}
-																																												if (flag[26])
+																																												if (flag[28])
 																																												{
-																																													str[2][square[26]] = 1;
-																																													stl[6][square[26]] = 1;
-																																													flag[26] = 0;
+																																													str[2][square[28]] = 1;
+																																													stl[8][square[28]] = 1;
+																																													flag[28] = 0;
 																																												}
 																																											}
-																																											if (flag[25])
+																																											if (flag[26])
 																																											{
-																																												str[2][square[25]] = 1;
-																																												stl[5][square[25]] = 1;
-																																												flag[25] = 0;
+																																												str[2][square[26]] = 1;
+																																												stl[6][square[26]] = 1;
+																																												flag[26] = 0;
 																																											}
 																																										}
-																																										if (flag[24])
+																																										if (flag[25])
 																																										{
-																																											str[2][square[24]] = 1;
-																																											stl[4][square[24]] = 1;
-																																											flag[24] = 0;
+																																											str[2][square[25]] = 1;
+																																											stl[5][square[25]] = 1;
+																																											flag[25] = 0;
 																																										}
 																																									}
-																																									if (flag[23])
+																																									if (flag[24])
 																																									{
-																																										str[2][square[23]] = 1;
-																																										stl[3][square[23]] = 1;
-																																										flag[23] = 0;
+																																										str[2][square[24]] = 1;
+																																										stl[4][square[24]] = 1;
+																																										flag[24] = 0;
 																																									}
 																																								}
-																																								if (flag[21])
+																																								if (flag[23])
 																																								{
-																																									str[2][square[21]] = 1;
-																																									stl[1][square[21]] = 1;
-																																									flag[21] = 0;
+																																									str[2][square[23]] = 1;
+																																									stl[3][square[23]] = 1;
+																																									flag[23] = 0;
 																																								}
 																																							}
-																																							if (flag[20])
+																																							if (flag[21])
 																																							{
-																																								str[2][square[20]] = 1;
-																																								stl[0][square[20]] = 1;
-																																								flag[20] = 0;
+																																								str[2][square[21]] = 1;
+																																								stl[1][square[21]] = 1;
+																																								flag[21] = 0;
 																																							}
 																																						}
-																																						if (flag[19])
+																																						if (flag[20])
 																																						{
-																																							str[1][square[19]] = 1;
-																																							stl[9][square[19]] = 1;
-																																							flag[19] = 0;
+																																							str[2][square[20]] = 1;
+																																							stl[0][square[20]] = 1;
+																																							flag[20] = 0;
 																																						}
 																																					}
-																																					if (flag[17])
+																																					if (flag[19])
 																																					{
-																																						str[1][square[17]] = 1;
-																																						stl[7][square[17]] = 1;
-																																						flag[17] = 0;
+																																						str[1][square[19]] = 1;
+																																						stl[9][square[19]] = 1;
+																																						flag[19] = 0;
 																																					}
 																																				}
-																																				if (flag[16])
+																																				if (flag[17])
 																																				{
-																																					str[1][square[16]] = 1;
-																																					stl[6][square[16]] = 1;
-																																					flag[16] = 0;
+																																					str[1][square[17]] = 1;
+																																					stl[7][square[17]] = 1;
+																																					flag[17] = 0;
 																																				}
 																																			}
-																																			if (flag[15])
+																																			if (flag[16])
 																																			{
-																																				str[1][square[15]] = 1;
-																																				stl[5][square[15]] = 1;
-																																				flag[15] = 0;
+																																				str[1][square[16]] = 1;
+																																				stl[6][square[16]] = 1;
+																																				flag[16] = 0;
 																																			}
 																																		}
-																																		if (flag[14])
+																																		if (flag[15])
 																																		{
-																																			str[1][square[14]] = 1;
-																																			stl[4][square[14]] = 1;
-																																			flag[14] = 0;
+																																			str[1][square[15]] = 1;
+																																			stl[5][square[15]] = 1;
+																																			flag[15] = 0;
 																																		}
 																																	}
-																																	if (flag[13])
+																																	if (flag[14])
 																																	{
-																																		str[1][square[13]] = 1;
-																																		stl[3][square[13]] = 1;
-																																		flag[13] = 0;
+																																		str[1][square[14]] = 1;
+																																		stl[4][square[14]] = 1;
+																																		flag[14] = 0;
 																																	}
 																																}
-																																if (flag[12])
+																																if (flag[13])
 																																{
-																																	str[1][square[12]] = 1;
-																																	stl[2][square[12]] = 1;
-																																	flag[12] = 0;
+																																	str[1][square[13]] = 1;
+																																	stl[3][square[13]] = 1;
+																																	flag[13] = 0;
 																																}
 																															}
-																															if (flag[10])
+																															if (flag[12])
 																															{
-																																str[1][square[10]] = 1;
-																																stl[0][square[10]] = 1;
-																																flag[10] = 0;
+																																str[1][square[12]] = 1;
+																																stl[2][square[12]] = 1;
+																																flag[12] = 0;
 																															}
 																														}
-																														if (flag[99])
+																														if (flag[10])
 																														{
-																															str[9][square[99]] = 1;
-																															stl[9][square[99]] = 1;
-																															diag[0][square[99]] = 1;
-																															flag[99] = 0;
+																															str[1][square[10]] = 1;
+																															stl[0][square[10]] = 1;
+																															flag[10] = 0;
 																														}
 																													}
-																													if (flag[90])
+																													if (flag[99])
 																													{
-																														str[9][square[90]] = 1;
-																														stl[0][square[90]] = 1;
-																														diag[1][square[90]] = 1;
-																														flag[90] = 0;
+																														str[9][square[99]] = 1;
+																														stl[9][square[99]] = 1;
+																														diag[0][square[99]] = 1;
+																														flag[99] = 0;
 																													}
 																												}
-																												if (flag[88])
+																												if (flag[90])
 																												{
-																													str[8][square[88]] = 1;
-																													stl[8][square[88]] = 1;
-																													diag[0][square[88]] = 1;
-																													flag[88] = 0;
+																													str[9][square[90]] = 1;
+																													stl[0][square[90]] = 1;
+																													diag[1][square[90]] = 1;
+																													flag[90] = 0;
 																												}
 																											}
-																											if (flag[81])
+																											if (flag[88])
 																											{
-																												str[8][square[81]] = 1;
-																												stl[1][square[81]] = 1;
-																												diag[1][square[81]] = 1;
-																												flag[81] = 0;
+																												str[8][square[88]] = 1;
+																												stl[8][square[88]] = 1;
+																												diag[0][square[88]] = 1;
+																												flag[88] = 0;
 																											}
 																										}
-																										if (flag[77])
+																										if (flag[81])
 																										{
-																											str[7][square[77]] = 1;
-																											stl[7][square[77]] = 1;
-																											diag[0][square[77]] = 1;
-																											flag[77] = 0;
+																											str[8][square[81]] = 1;
+																											stl[1][square[81]] = 1;
+																											diag[1][square[81]] = 1;
+																											flag[81] = 0;
 																										}
 																									}
-																									if (flag[72])
+																									if (flag[77])
 																									{
-																										str[7][square[72]] = 1;
-																										stl[2][square[72]] = 1;
-																										diag[1][square[72]] = 1;
-																										flag[72] = 0;
+																										str[7][square[77]] = 1;
+																										stl[7][square[77]] = 1;
+																										diag[0][square[77]] = 1;
+																										flag[77] = 0;
 																									}
 																								}
-																								if (flag[66])
+																								if (flag[72])
 																								{
-																									str[6][square[66]] = 1;
-																									stl[6][square[66]] = 1;
-																									diag[0][square[66]] = 1;
-																									flag[66] = 0;
+																									str[7][square[72]] = 1;
+																									stl[2][square[72]] = 1;
+																									diag[1][square[72]] = 1;
+																									flag[72] = 0;
 																								}
 																							}
-																							if (flag[63])
+																							if (flag[66])
 																							{
-																								str[6][square[63]] = 1;
-																								stl[3][square[63]] = 1;
-																								diag[1][square[63]] = 1;
-																								flag[63] = 0;
+																								str[6][square[66]] = 1;
+																								stl[6][square[66]] = 1;
+																								diag[0][square[66]] = 1;
+																								flag[66] = 0;
 																							}
 																						}
-																						if (flag[55])
+																						if (flag[63])
 																						{
-																							str[5][square[55]] = 1;
-																							stl[5][square[55]] = 1;
-																							diag[0][square[55]] = 1;
-																							flag[55] = 0;
+																							str[6][square[63]] = 1;
+																							stl[3][square[63]] = 1;
+																							diag[1][square[63]] = 1;
+																							flag[63] = 0;
 																						}
 																					}
-																					if (flag[54])
+																					if (flag[55])
 																					{
-																						str[5][square[54]] = 1;
-																						stl[4][square[54]] = 1;
-																						diag[1][square[54]] = 1;
-																						flag[54] = 0;
+																						str[5][square[55]] = 1;
+																						stl[5][square[55]] = 1;
+																						diag[0][square[55]] = 1;
+																						flag[55] = 0;
 																					}
 																				}
-																				if (flag[45])
+																				if (flag[54])
 																				{
-																					str[4][square[45]] = 1;
-																					stl[5][square[45]] = 1;
-																					diag[1][square[45]] = 1;
-																					flag[45] = 0;
+																					str[5][square[54]] = 1;
+																					stl[4][square[54]] = 1;
+																					diag[1][square[54]] = 1;
+																					flag[54] = 0;
 																				}
 																			}
-																			if (flag[44])
+																			if (flag[45])
 																			{
-																				str[4][square[44]] = 1;
-																				stl[4][square[44]] = 1;
-																				diag[0][square[44]] = 1;
-																				flag[44] = 0;
+																				str[4][square[45]] = 1;
+																				stl[5][square[45]] = 1;
+																				diag[1][square[45]] = 1;
+																				flag[45] = 0;
 																			}
 																		}
-																		if (flag[36])
+																		if (flag[44])
 																		{
-																			str[3][square[36]] = 1;
-																			stl[6][square[36]] = 1;
-																			diag[1][square[36]] = 1;
-																			flag[36] = 0;
+																			str[4][square[44]] = 1;
+																			stl[4][square[44]] = 1;
+																			diag[0][square[44]] = 1;
+																			flag[44] = 0;
 																		}
 																	}
-																	if (flag[33])
+																	if (flag[36])
 																	{
-																		str[3][square[33]] = 1;
-																		stl[3][square[33]] = 1;
-																		diag[0][square[33]] = 1;
-																		flag[33] = 0;
+																		str[3][square[36]] = 1;
+																		stl[6][square[36]] = 1;
+																		diag[1][square[36]] = 1;
+																		flag[36] = 0;
 																	}
 																}
-																if (flag[27])
+																if (flag[33])
 																{
-																	str[2][square[27]] = 1;
-																	stl[7][square[27]] = 1;
-																	diag[1][square[27]] = 1;
-																	flag[27] = 0;
+																	str[3][square[33]] = 1;
+																	stl[3][square[33]] = 1;
+																	diag[0][square[33]] = 1;
+																	flag[33] = 0;
 																}
 															}
-															if (flag[22])
+															if (flag[27])
 															{
-																str[2][square[22]] = 1;
-																stl[2][square[22]] = 1;
-																diag[0][square[22]] = 1;
-																flag[22] = 0;
+																str[2][square[27]] = 1;
+																stl[7][square[27]] = 1;
+																diag[1][square[27]] = 1;
+																flag[27] = 0;
 															}
 														}
-														if (flag[18])
+														if (flag[22])
 														{
-															str[1][square[18]] = 1;
-															stl[8][square[18]] = 1;
-															diag[1][square[18]] = 1;
-															flag[18] = 0;
+															str[2][square[22]] = 1;
+															stl[2][square[22]] = 1;
+															diag[0][square[22]] = 1;
+															flag[22] = 0;
 														}
 													}
-													if (flag[11])
+													if (flag[18])
 													{
-														str[1][square[11]] = 1;
-														stl[1][square[11]] = 1;
-														diag[0][square[11]] = 1;
-														flag[11] = 0;
+														str[1][square[18]] = 1;
+														stl[8][square[18]] = 1;
+														diag[1][square[18]] = 1;
+														flag[18] = 0;
 													}
 												}
-												if (flag[9])
+												if (flag[11])
 												{
-													str[0][square[9]] = 1;
-													stl[9][square[9]] = 1;
-													diag[1][square[9]] = 1;
-													flag[9] = 0;
+													str[1][square[11]] = 1;
+													stl[1][square[11]] = 1;
+													diag[0][square[11]] = 1;
+													flag[11] = 0;
 												}
 											}
-											if (flag[8])
+											if (flag[9])
 											{
-												str[0][square[8]] = 1;
-												stl[8][square[8]] = 1;
-												flag[8] = 0;
+												str[0][square[9]] = 1;
+												stl[9][square[9]] = 1;
+												diag[1][square[9]] = 1;
+												flag[9] = 0;
 											}
 										}
-										if (flag[7])
+										if (flag[8])
 										{
-											str[0][square[7]] = 1;
-											stl[7][square[7]] = 1;
-											flag[7] = 0;
+											str[0][square[8]] = 1;
+											stl[8][square[8]] = 1;
+											flag[8] = 0;
 										}
 									}
-									if (flag[6])
+									if (flag[7])
 									{
-										str[0][square[6]] = 1;
-										stl[6][square[6]] = 1;
-										flag[6] = 0;
+										str[0][square[7]] = 1;
+										stl[7][square[7]] = 1;
+										flag[7] = 0;
 									}
 								}
-								if (flag[5])
+								if (flag[6])
 								{
-									str[0][square[5]] = 1;
-									stl[5][square[5]] = 1;
-									flag[5] = 0;
+									str[0][square[6]] = 1;
+									stl[6][square[6]] = 1;
+									flag[6] = 0;
 								}
 							}
-							if (flag[4])
+							if (flag[5])
 							{
-								str[0][square[4]] = 1;
-								stl[4][square[4]] = 1;
-								flag[4] = 0;
+								str[0][square[5]] = 1;
+								stl[5][square[5]] = 1;
+								flag[5] = 0;
 							}
 						}
-						if (flag[3])
+						if (flag[4])
 						{
-							str[0][square[3]] = 1;
-							stl[3][square[3]] = 1;
-							flag[3] = 0;
+							str[0][square[4]] = 1;
+							stl[4][square[4]] = 1;
+							flag[4] = 0;
 						}
 					}
-					if (flag[2])
+					if (flag[3])
 					{
-						str[0][square[2]] = 1;
-						stl[2][square[2]] = 1;
-						flag[2] = 0;
+						str[0][square[3]] = 1;
+						stl[3][square[3]] = 1;
+						flag[3] = 0;
 					}
 				}
-				if (flag[1])
+				if (flag[2])
 				{
-					str[0][square[1]] = 1;
-					stl[1][square[1]] = 1;
-					flag[1] = 0;
+					str[0][square[2]] = 1;
+					stl[2][square[2]] = 1;
+					flag[2] = 0;
 				}
 			}
-			if (flag[0])
+			if (flag[1])
 			{
-				str[0][square[0]] = 1;
-				stl[0][square[0]] = 1;
-				diag[0][square[0]] = 1;
-				flag[0] = 0;
+				str[0][square[1]] = 1;
+				stl[1][square[1]] = 1;
+				flag[1] = 0;
 			}
+		}
+		if (flag[0])
+		{
+			str[0][square[0]] = 1;
+			stl[0][square[0]] = 1;
+			diag[0][square[0]] = 1;
+			flag[0] = 0;
 		}
 	}
 
-	return local_max;
+	return (local_max);
 }

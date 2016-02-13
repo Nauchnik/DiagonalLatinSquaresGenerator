@@ -110,28 +110,108 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 	int orthogonal_value_from_computing_process = 0;
 	int fragment_index_from_computing_process = 0;
 	unsigned solved_tasks_count = 0;
-	int current_bkv_neg = -100;
 	int result_from_computing_process = 0;
 	unsigned no_dls_stopped_count = 0, low_local_bkv_stopped_count = 0;
 	t1 = MPI_Wtime();
-	unsigned bkv;
-
+	int global_max;
+	bool isNewTaskNeeded = true;
+	
 	// start of receiving results and sending new tasks instead
 	while (solved_tasks_count < NUMBER_OF_COMB) {
 		//std::cout << "process " << rank << " before recieving" << std::endl;
-		MPI_Recv( &fragment_index_from_computing_process, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
-		MPI_Recv( &orthogonal_value_from_computing_process, 1, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
-
-		if (fragment_index_from_computing_process == -1) { // just a comparison of local and global bkv
-			bkv = best_total_pseudotriple.unique_orthogonal_cells.size();
-			MPI_Send(&bkv, 1, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD);
-			continue;
+		isNewTaskNeeded = true;
+		MPI_Recv(&fragment_index_from_computing_process, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+		MPI_Recv(&orthogonal_value_from_computing_process, 1, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
+		if (fragment_index_from_computing_process == EXCHANGE_LOCAL_GLOBAL_BKV) {
+			isNewTaskNeeded = false;
+			MPI_Recv(&fragment_index_from_computing_process, 1, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
+			global_max = best_total_pseudotriple.unique_orthogonal_cells.size();
+			MPI_Send(&global_max, 1, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD);
 		}
-
+		
 		if (orthogonal_value_from_computing_process == 0) {
 			std::cerr << "orthogonal_value_from_computing_process == 0" << std::endl;
 			MPI_Abort(MPI_COMM_WORLD, 0);
 		}
+		
+		// if new global BKV
+		if (orthogonal_value_from_computing_process > global_max) {
+			std::cout << "New global BKV from fragment_index " << fragment_index_from_computing_process << std::endl;
+			std::cout << "orthogonal_value_from_computing_process " << orthogonal_value_from_computing_process << std::endl;
+			//std::cout << "process " << rank << " recieved " << orthogonal_value_from_message << std::endl;
+			MPI_Recv(psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
+			MPI_Recv(&odls_seq.first_dls_generate_time, 1, MPI_DOUBLE, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
+			MPI_Recv(&odls_seq.generated_DLS_count, 1, MPI_UNSIGNED_LONG_LONG, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
+			std::cout << "record pseudotriple recieved" << std::endl;
+			total_fragment_data[fragment_index_from_computing_process].first_dls_generate_time = odls_seq.first_dls_generate_time;
+			total_fragment_data[fragment_index_from_computing_process].generated_DLS_count = odls_seq.generated_DLS_count;
+			total_fragment_data[fragment_index_from_computing_process].orthogonal_value = orthogonal_value_from_computing_process;
+			updateFragmentFile(total_fragment_data, mpi_start_time);
+
+			char_index = 0;
+			for (int i = 0; i < LS_ORDER; i++)
+				for (int j = 0; j < LS_ORDER; j++)
+					cur_pair.dls_1[i][j] = psuedotriple_char_arr[char_index++];
+			for (int i = 0; i < LS_ORDER; i++)
+				for (int j = 0; j < LS_ORDER; j++)
+					cur_pair.dls_2[i][j] = psuedotriple_char_arr[char_index++];
+			for (int i = 0; i < LS_ORDER; i++)
+				for (int j = 0; j < LS_ORDER; j++)
+					new_dls[i][j] = psuedotriple_char_arr[char_index++];
+			odls_seq.makePseudotriple(cur_pair, new_dls, odls_seq.dls_psudotriple);
+			out_sstream << "dls_psudotriple.unique_orthogonal_cells.size() " << odls_seq.dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
+
+			if (orthogonal_value_from_computing_process != odls_seq.dls_psudotriple.unique_orthogonal_cells.size()) {
+				std::cerr << "error. orthogonal_value_from_message != dls_psudotriple.unique_orthogonal_cells.size()" << std::endl;
+				std::cerr << orthogonal_value_from_computing_process << " != " << odls_seq.dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
+				MPI_Abort(MPI_COMM_WORLD, 0);
+			}
+			
+			// new BKV found
+			best_total_pseudotriple = odls_seq.dls_psudotriple;
+
+			// send new BKV to all computing processes
+			// send negative value to make difference between bkv and new search space index
+			/*current_bkv_neg = -(int)(best_total_pseudotriple.unique_orthogonal_cells.size());
+			std::cout << "current_bkv_neg " << current_bkv_neg << std::endl;
+			for (int i = 0; i < corecount - 1; i++)
+			MPI_Isend(&current_bkv_neg, 1, MPI_INT, i + 1, 0, MPI_COMM_WORLD, &request);*/
+
+			t2 = MPI_Wtime();
+			out_sstream << std::endl << "new total_bkv " << best_total_pseudotriple.unique_orthogonal_cells.size() << std::endl;
+			out_sstream << "time from previous BKV " << t2 - t1 << std::endl;
+			out_sstream << "time from start " << t2 - total_start_time << std::endl << std::endl;
+			t1 = t2;
+			for (auto &x : best_total_pseudotriple.dls_1) {
+				for (auto &y : x)
+					out_sstream << y << " ";
+				out_sstream << std::endl;
+			}
+			out_sstream << std::endl;
+			for (auto &x : best_total_pseudotriple.dls_2) {
+				for (auto &y : x)
+					out_sstream << y << " ";
+				out_sstream << std::endl;
+			}
+			out_sstream << std::endl;
+			for (auto &x : best_total_pseudotriple.dls_3) {
+				for (auto &y : x)
+					out_sstream << y << " ";
+				out_sstream << std::endl;
+			}
+			out_sstream << std::endl;
+			for (auto &x : best_total_pseudotriple.unique_orthogonal_cells)
+				out_sstream << x << " ";
+			out_sstream << std::endl;
+
+			ofile.open("out", std::ios_base::app);
+			ofile << out_sstream.str();
+			ofile.close();
+			out_sstream.clear(); out_sstream.str("");
+		}
+
+		if (!isNewTaskNeeded)
+			continue;
 		
 		// if processing of a task was interrupted, then send new task on a freed process
 		if (( orthogonal_value_from_computing_process == STOP_DUE_NO_DLS) ||
@@ -176,82 +256,10 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 			ofile << out_sstream.str();
 			ofile.close();
 			out_sstream.clear(); out_sstream.str("");
-			updateFragmentFile(total_fragment_data, mpi_start_time);
+			//updateFragmentFile(total_fragment_data, mpi_start_time);
 			continue;
 		}
-		else if ((orthogonal_value_from_computing_process > 0) && (orthogonal_value_from_computing_process <= LS_ORDER*LS_ORDER)) { // if new local BKV was received
-			//std::cout << "process " << rank << " recieved " << orthogonal_value_from_message << std::endl;
-			MPI_Recv(psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
-			MPI_Recv(&odls_seq.first_dls_generate_time, 1, MPI_DOUBLE, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
-			MPI_Recv(&odls_seq.generated_DLS_count, 1, MPI_UNSIGNED_LONG_LONG, status.MPI_SOURCE, 0, MPI_COMM_WORLD, &status);
-			total_fragment_data[fragment_index_from_computing_process].first_dls_generate_time = odls_seq.first_dls_generate_time;
-			total_fragment_data[fragment_index_from_computing_process].generated_DLS_count = odls_seq.generated_DLS_count;
-			total_fragment_data[fragment_index_from_computing_process].orthogonal_value = orthogonal_value_from_computing_process;
-			updateFragmentFile(total_fragment_data, mpi_start_time);
-		}
-		
-		char_index = 0;
-		for (int i = 0; i < LS_ORDER; i++)
-			for (int j = 0; j < LS_ORDER; j++)
-				cur_pair.dls_1[i][j] = psuedotriple_char_arr[char_index++];
-		for (int i = 0; i < LS_ORDER; i++)
-			for (int j = 0; j < LS_ORDER; j++)
-				cur_pair.dls_2[i][j] = psuedotriple_char_arr[char_index++];
-		for (int i = 0; i < LS_ORDER; i++)
-			for (int j = 0; j < LS_ORDER; j++)
-				new_dls[i][j] = psuedotriple_char_arr[char_index++];
-		odls_seq.makePseudotriple(cur_pair, new_dls, odls_seq.dls_psudotriple);
-		out_sstream << "dls_psudotriple.unique_orthogonal_cells.size() " << odls_seq.dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
-		
-		if ( orthogonal_value_from_computing_process != odls_seq.dls_psudotriple.unique_orthogonal_cells.size() ) {
-			std::cerr << "error. orthogonal_value_from_message != dls_psudotriple.unique_orthogonal_cells.size()" << std::endl;
-			std::cerr << orthogonal_value_from_computing_process << " != " << odls_seq.dls_psudotriple.unique_orthogonal_cells.size() << std::endl;
-			MPI_Abort( MPI_COMM_WORLD, 0 );
-		}
-		
-		if (odls_seq.dls_psudotriple.unique_orthogonal_cells.size() > best_total_pseudotriple.unique_orthogonal_cells.size()) {
-			// new BKV found
-			best_total_pseudotriple = odls_seq.dls_psudotriple;
 
-			// send new BKV to all computing processes
-			// send negative value to make difference between bkv and new search space index
-			current_bkv_neg = -(int)(best_total_pseudotriple.unique_orthogonal_cells.size()); 
-			std::cout << "current_bkv_neg " << current_bkv_neg << std::endl;
-			for (int i = 0; i < corecount - 1; i++)
-				MPI_Isend(&current_bkv_neg, 1, MPI_INT, i + 1, 0, MPI_COMM_WORLD, &request); 
-			
-			t2 = MPI_Wtime();
-			out_sstream << std::endl << "new total_bkv " << best_total_pseudotriple.unique_orthogonal_cells.size() << std::endl;
-			out_sstream << "time from previous BKV " << t2 - t1 << std::endl;
-			out_sstream << "time from start " << t2 - total_start_time << std::endl << std::endl;
-			t1 = t2;
-			for ( auto &x : best_total_pseudotriple.dls_1 ) {
-				for ( auto &y : x )
-					out_sstream << y << " ";
-				out_sstream << std::endl;
-			}
-			out_sstream << std::endl;
-			for ( auto &x : best_total_pseudotriple.dls_2 ) {
-				for ( auto &y : x )
-					out_sstream << y << " ";
-				out_sstream << std::endl;
-			}
-			out_sstream << std::endl;
-			for ( auto &x : best_total_pseudotriple.dls_3 ) {
-				for ( auto &y : x )
-					out_sstream << y << " ";
-				out_sstream << std::endl;
-			}
-			out_sstream << std::endl;
-			for ( auto &x : best_total_pseudotriple.unique_orthogonal_cells )
-				out_sstream << x << " ";
-			out_sstream << std::endl;
-			
-			ofile.open( "out", std::ios_base::app );
-			ofile << out_sstream.str();
-			ofile.close();
-			out_sstream.clear(); out_sstream.str("");
-		}
 		// check if it's time to stop program
 		/*if (NUMBER_OF_COMB - solved_tasks_count < (unsigned)(corecount - 1)) {
 			// there are some idle processes right now
@@ -282,7 +290,6 @@ void controlProcess(int rank, int corecount, odls_sequential odls_seq)
 void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 {
 	std::string known_podls_file_name = "ODLS_10_pairs.txt";
-
 	odls_seq.readOdlsPairs(known_podls_file_name);
 
 	if ( rank == 1)
@@ -330,34 +337,14 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 	
 	MPI_Status status;
 	int old_fragment_index;
-	int result;
-	int value_from_control_process;
-	int bkv_from_control_process;
 	int fragment_index = 0;
-	bool isMessageSent;
-
+	int cur_orthogonal_value = 0;
+	
 	// repeat solving tasks from the control process
 	for (;;) {
 		old_fragment_index = fragment_index;
-		// firstly check messages with current BKV
-		isMessageSent = false;
-		do {
-			MPI_Recv(&value_from_control_process, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
-			if (value_from_control_process < 0) { // message with new global BKV
-				bkv_from_control_process = abs(value_from_control_process);
-				if ((unsigned)bkv_from_control_process > odls_seq.best_all_dls_psudotriple.unique_orthogonal_cells.size() + MAX_DIFF_VALUE_FROM_BKV) {
-					result = STOP_DUE_LOW_LOCAL_BKV;
-					if (!isMessageSent) {
-						// result > 0, i.e. task solving was interrupted, ask for new task
-						MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-						MPI_Send(&result, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-						isMessageSent = true;
-					}
-				}
-			}
-		} while (value_from_control_process < 0);
+		MPI_Recv(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
 		
-		fragment_index = value_from_control_process;
 		std::cout << "received fragment_index " << fragment_index << std::endl;
 		if (fragment_index < old_fragment_index) {
 			std::cerr << "fragment_index < old_fragment_index" << std::endl;
@@ -366,7 +353,7 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 			exit(1);
 		}
 		
-		result = odls_seq.generateDLS(fragment_index, rank);
+		cur_orthogonal_value = odls_seq.generateDLS(NUMBER_OF_COMB, fragment_index, rank);
 		
 		odls_seq.best_all_dls_psudotriple.unique_orthogonal_cells.clear();
 		odls_seq.best_one_dls_psudotriple.unique_orthogonal_cells.clear();
@@ -374,18 +361,18 @@ void computingProcess(int rank, int corecount, odls_sequential odls_seq)
 		if ( rank == 0)
 			std::cout << "deterministic_generate_dls() finished on rank " << rank << std::endl;
 		
-		if (result == STOP_DUE_NO_DLS)
+		if (cur_orthogonal_value == STOP_DUE_NO_DLS)
 			std::cout << "STOP_DUE_NO_DLS on rank " << rank << std::endl;
-		else if (result == STOP_DUE_LOW_LOCAL_BKV)
+		else if (cur_orthogonal_value == STOP_DUE_LOW_LOCAL_BKV)
 			std::cout << "STOP_DUE_LOW_LOCAL_BKV on rank " << rank << std::endl;
-		else if (result == 0) {
+		else if (cur_orthogonal_value == 0) {
 			std::cerr << "local_max == 0 on fragment_index " << fragment_index << std::endl;
 			exit(1);
 		}
 		
 		// result > 0, i.e. task solving was interrupted, ask for new task
 		MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-		MPI_Send(&result, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+		MPI_Send(&cur_orthogonal_value, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 	}
 }
 

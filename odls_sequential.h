@@ -22,10 +22,11 @@ const unsigned psuedotriple_char_arr_len = 3 * LS_ORDER * LS_ORDER;
 const unsigned NUMBER_OF_COMB = 2445393; // 15953 72356
 const int STOP_DUE_NO_DLS = -1;
 const int STOP_DUE_LOW_LOCAL_BKV = -2;
+const int EXCHANGE_LOCAL_GLOBAL_BKV = -3;
 //const double WAIT_FIRST_RESULTS_SECONDS = 1800;
 //const double WAIT_FINAL_PROCESS_SECONDS = 36000;
-const unsigned MAX_DIFF_VALUE_FROM_BKV = 5;
-const unsigned NUM_OF_DLS_IN_ONE_CHECK = 1000000;
+const unsigned MAX_DIFF_VALUE_FROM_BKV = 3;
+const unsigned NUM_OF_DLS_IN_ONE_CHECK = 10000;
 
 struct odls_pair
 {
@@ -67,9 +68,9 @@ public:
 	double first_dls_generate_time;
 	void readOdlsPairs(std::string known_podls_file_name);
 	void makePseudotriple(odls_pair &orthogonal_pair, dls &new_dls, odls_pseudotriple &pseudotriple);
-	unsigned short processNewDLS(int fragment_index, unsigned short int *square);
-	int compareLocalRecordWithGlobal(int fragment_index, int local_max);
-	int generateDLS(int fragment_index, int rank);
+	void processNewDLS(int fragment_index, unsigned short int *square);
+	int compareLocalRecordWithGlobal(int fragment_index);
+	int generateDLS(int parts, int part, int rank);
 };
 
 #endif
