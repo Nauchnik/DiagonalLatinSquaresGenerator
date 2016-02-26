@@ -25,7 +25,7 @@ const int STOP_DUE_LOW_LOCAL_BKV = -2;
 const int EXCHANGE_LOCAL_GLOBAL_BKV = -3;
 //const double WAIT_FIRST_RESULTS_SECONDS = 1800;
 //const double WAIT_FINAL_PROCESS_SECONDS = 36000;
-const unsigned MAX_DIFF_VALUE_FROM_BKV = 3;
+const int MAX_DIFF_VALUE_FROM_BKV = 3;
 const unsigned NUM_OF_DLS_IN_ONE_CHECK = 10000;
 
 struct odls_pair

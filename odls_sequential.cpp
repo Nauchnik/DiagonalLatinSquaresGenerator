@@ -121,8 +121,10 @@ void odls_sequential::processNewDLS(int fragment_index, unsigned short int *squa
 	//dls_total_time += MPI_Wtime() - dls_generate_last_time;
 
 	// time for generating first DLS
+#ifdef _MPI
 	if (generated_DLS_count == 0)
 		first_dls_generate_time = MPI_Wtime() - dls_generate_last_time;
+#endif
 
 	//dls_generate_last_time = MPI_Wtime();
 
@@ -172,20 +174,21 @@ void odls_sequential::processNewDLS(int fragment_index, unsigned short int *squa
 int odls_sequential::compareLocalRecordWithGlobal(int fragment_index)
 {
 	// send local BKV, recieve global BKV and compare them
-	int global_max;
+	int global_max = 0;
 	int local_max = best_all_dls_psudotriple.unique_orthogonal_cells.size();
 	unsigned char_index;
 	char psuedotriple_char_arr[psuedotriple_char_arr_len];
 	unsigned ortogonal_cells;
-	MPI_Status status;
 	int tmp = EXCHANGE_LOCAL_GLOBAL_BKV;
-
+#ifdef _MPI
+	MPI_Status status;
 	// ask for current global BKV
 	MPI_Send(&tmp, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 	MPI_Send(&local_max, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 	MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 	// receive current global BKV
 	MPI_Recv(&global_max, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+#endif
 	
 	if( local_max > global_max )	
 	{
@@ -204,9 +207,11 @@ int odls_sequential::compareLocalRecordWithGlobal(int fragment_index)
 
 		//MPI_Send(&fragment_index, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 		//MPI_Send(&ortogonal_cells, 1, MPI_UNSIGNED, 0, 0, MPI_COMM_WORLD);
+#ifdef _MPI
 		MPI_Send(psuedotriple_char_arr, psuedotriple_char_arr_len, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&first_dls_generate_time, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&generated_DLS_count, 1, MPI_UNSIGNED_LONG_LONG, 0, 0, MPI_COMM_WORLD);
+#endif
 	}
 	else if ( local_max < global_max - MAX_DIFF_VALUE_FROM_BKV)
 		return STOP_DUE_LOW_LOCAL_BKV;
@@ -216,6 +221,8 @@ int odls_sequential::compareLocalRecordWithGlobal(int fragment_index)
 
 int odls_sequential::generateDLS(int parts, int part, int rank)
 {
+	unsigned short int local_max = 0;
+#ifdef _MPI
 	unsigned short int square[100] = { 0 };
 	unsigned short int stl[10][10] = { 1 };
 	unsigned short int str[10][10] = { 1 };
@@ -230,7 +237,6 @@ int odls_sequential::generateDLS(int parts, int part, int rank)
 	unsigned long long int number_real = 0;
 
 	unsigned short int result = 0;
-	unsigned short int local_max = 0;
 	unsigned short int global_max = 0;
 
 	unsigned long long int count = 0;
@@ -240,6 +246,7 @@ int odls_sequential::generateDLS(int parts, int part, int rank)
 	int number_of_comb_in_one_part = 1;
 	unsigned short int cur_pseudotriple_characteristics = 0;
 	int comparison_result;
+
 
 	//обнуление квадратов и флагов перед генерацией областей ДЛК
 	for (i = 0; i<100; i++)
@@ -2175,6 +2182,6 @@ int odls_sequential::generateDLS(int parts, int part, int rank)
 			flag[0] = 0;
 		}
 	}
-
-	return (local_max);
+#endif
+	return local_max;
 }
